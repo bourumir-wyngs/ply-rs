@@ -42,11 +42,11 @@ element vertex {len(vertices)}
         file.write(struct.pack(face_indices_format, *face[1:]))
 
 
-# Define vertex data and face data
+# This defines the rotated, right triangle with edges 3:4:5
 vertices = [
-    (1.0, 2.0, 3.0),  # Vertex 1
-    (4.0, 5.0, 6.0),  # Vertex 2
-    (7.0, 8.0, 9.0),  # Vertex 3
+    (-0.7, 2.1, 0),  # Rotated Vertex 1
+    (1.4, 4.2, 0),  # Rotated Vertex 2
+    (-3.5, 4.9, 0),  # Rotated Vertex 3
 ]
 face = [3, 0, 1, 2]  # A single triangular face
 
