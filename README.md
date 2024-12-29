@@ -40,7 +40,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ply-rs-bw = "1.0.1"
+ply-rs-bw = "2.0"
 ```
 
 Add to your root:
