@@ -16,7 +16,9 @@ edition. Additionally, an example has been added to demonstrate how to read PLY 
 Version 2.0.0 eliminates unnecessary cloning, as suggested by Nguyen Thuan Hung (see [pull request 'Optimise by not cloning key'](https://github.com/Fluci/ply-rs/pull/21/files)). While the scope of this change is limited, it modifies the signature of the public API trait `PropertyAccess`. The method:
 
 `fn set_property(&mut self, _property_name: String, _property: Property)`
+
 into
+
 `fn set_property(&mut self, _property_name: &String, _property: Property)`
 
 This breaking change necessitates incrementing the major version number. According to the author, this optimization reduces the time required to read 80,000 points from 450ms to 90ms, which is a significant improvement. The pull request has been reviewed and approved by our team.
