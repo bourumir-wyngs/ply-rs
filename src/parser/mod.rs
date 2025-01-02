@@ -281,21 +281,21 @@ impl<E: PropertyAccess> Parser<E> {
     }
     /// internal dispatcher based on the encoding
     fn __read_payload<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, header: &Header) -> Result<Payload<E>> {
-        let mut payload = Payload::new();
-        match header.encoding {
-            Encoding::Ascii => for (k, ref e) in &header.elements {
-                let elems = self.__read_ascii_payload_for_element(reader, location, e)?;
-                payload.insert(k.clone(), elems);
-            },
-            Encoding::BinaryBigEndian => for (k, ref e) in &header.elements {
-                let elems = self.__read_big_endian_payload_for_element(reader, location, e)?;
-                payload.insert(k.clone(), elems);
-            },
-            Encoding::BinaryLittleEndian => for (k, ref e) in &header.elements {
-                let elems = self.__read_little_endian_payload_for_element(reader, location, e)?;
-                payload.insert(k.clone(), elems);
-            }
+        let mut payload = Payload::with_capacity(header.elements.len());
+
+        // Use an iterator over `header.elements` and avoid repeated matching
+        let read_payload_for_element = match header.encoding {
+            Encoding::Ascii => Self::__read_ascii_payload_for_element,
+            Encoding::BinaryBigEndian => Self::__read_big_endian_payload_for_element,
+            Encoding::BinaryLittleEndian => Self::__read_little_endian_payload_for_element,
+        };
+
+        // Iterate over elements and process each with the selected reader
+        for (key, element_def) in &header.elements {
+            let elems = read_payload_for_element(self, reader, location, element_def)?;
+            payload.insert(key.clone(), elems);
         }
+
         Ok(payload)
     }
 }
@@ -326,8 +326,8 @@ use std::marker;
 /// # Ascii
 impl<E: PropertyAccess> Parser<E> {
     fn __read_ascii_payload_for_element<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
-        let mut elems = Vec::<E>::new();
-        let mut line_str = String::new();
+        let mut elems = Vec::<E>::with_capacity(element_def.count);
+        let mut line_str = String::with_capacity(16);
         for _ in 0..element_def.count {
             line_str.clear();
             reader.read_line(&mut line_str)?;
@@ -409,19 +409,20 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<String>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
-        let mut list = Vec::<D>::new();
-        for i in 0..count {
-            let s : &String = match elem_iter.next() {
-                None => return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Couldn't find a list element at index {}.", i)
-                )),
-                Some(x) => x
-            };
-            let value : D = self.parse(s)?;
-            list.push(value);
-        }
-        Ok(list)
+        let list: Result<Vec<D>> = elem_iter
+            .take(count)
+            .enumerate()
+            .map(|(i, s)| {
+                s.parse().map_err(|err| {
+                    io::Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("Couldn't parse element at index {}: {:?}", i, err),
+                    )
+                })
+            })
+            .collect();
+
+        list
     }
 }
 
@@ -467,7 +468,8 @@ impl<E: PropertyAccess> Parser<E> {
     }
 
     fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
-        let mut elems = Vec::<E>::new();
+        let mut elems = Vec::<E>::with_capacity(element_def.count);
+        location.next_line();;
         for _ in 0..element_def.count {
             let element = self.__read_binary_element::<T, B>(reader, element_def)?;
             elems.push(element);
