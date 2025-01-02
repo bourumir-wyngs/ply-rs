@@ -5,7 +5,6 @@
 [![crates.io](https://img.shields.io/crates/l/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
 [![crates.io](https://img.shields.io/crates/d/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
 [![docs.rs](https://docs.rs/ply-rs-bw/badge.svg)](https://docs.rs/ply-rs-bw)
-[![Dependency Vulnerabilities](https://img.shields.io/endpoint?url=https%3A%2F%2Fapi-hooks.soos.io%2Fapi%2Fshieldsio-badges%3FbadgeType%3DDependencyVulnerabilities%26pid%3Dtgochi2l5%26branchName%3Dmaster%26packageVersion%3Dlatest-stable)](https://app.soos.io/research/packages/rust/-/ply-rs-bw)
 
 This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was created to address the use of `linked-hash-map` to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). 
 
@@ -16,7 +15,9 @@ edition. Additionally, an example has been added to demonstrate how to read PLY 
 Version 2.0.0 eliminates unnecessary cloning, as suggested by Nguyen Thuan Hung (see [pull request 'Optimise by not cloning key'](https://github.com/Fluci/ply-rs/pull/21/files)). While the scope of this change is limited, it modifies the signature of the public API trait `PropertyAccess`. The method:
 
 `fn set_property(&mut self, _property_name: String, _property: Property)`
+
 into
+
 `fn set_property(&mut self, _property_name: &String, _property: Property)`
 
 This breaking change necessitates incrementing the major version number. According to the author, this optimization reduces the time required to read 80,000 points from 450ms to 90ms, which is a significant improvement. The pull request has been reviewed and approved by our team.
@@ -38,7 +39,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ply-rs-bw = "1.0.1"
+ply-rs-bw = "2.0"
 ```
 
 Add to your root:
