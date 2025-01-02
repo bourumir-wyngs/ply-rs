@@ -469,7 +469,7 @@ impl<E: PropertyAccess> Parser<E> {
 
     fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(element_def.count);
-        location.next_line();;
+        location.next_line();
         for _ in 0..element_def.count {
             let element = self.__read_binary_element::<T, B>(reader, element_def)?;
             elems.push(element);
