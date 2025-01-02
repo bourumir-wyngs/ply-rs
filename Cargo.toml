@@ -1,6 +1,6 @@
 [package]
 name = "ply-rs-bw"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Felice Serena <felice@serena-mueller.ch>","Bourumir Wyngs<use@github_to_contact"]
 repository = "https://github.com/bourumir-wyngs/ply-rs"
 homepage = "https://github.com/bourumir-wyngs/ply-rs"
