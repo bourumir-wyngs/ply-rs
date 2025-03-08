@@ -8,7 +8,7 @@
 
 This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was created to address the use of `linked-hash-map` to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). 
 
-The crate has been renamed to `ply-rs-bw,` and minor issues were resolved to ensure compatibility with Rust 2021
+The crate has been renamed to `ply-rs-bw,` and minor issues were resolved to ensure compatibility with Rust 2024
 edition. Additionally, an example has been added to demonstrate how to read PLY files with diverse field types
 (e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). Semantic versioning is now adopted for consistent version management.
 
