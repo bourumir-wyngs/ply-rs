@@ -114,13 +114,13 @@ rule trimmed_line() -> Line
 	/ v:element() { Line::Element(v) }
 	/ v:property() { Line::Property(v) }
 
-rule any_number() -> String
-	= s:$(['-'|'+']? ['0'..='9']+("."['0'..='9']+)?(['e'|'E']['-'|'+']?['0'..='9']+)?) { s.to_string() }
+rule any_number() -> &'input str
+	= s:$(['-'|'+']? ['0'..='9']+("."['0'..='9']+)?(['e'|'E']['-'|'+']?['0'..='9']+)?) { s }
 
-rule trimmed_data_line() -> Vec<String>
+rule trimmed_data_line() -> Vec<&'input str>
 	= any_number() ** space()
 
-pub rule data_line() -> Vec<String>
-	= space()? l:trimmed_data_line() space()? line_break()? {l}
+pub rule data_line() -> Vec<&'input str>
+	= space()? l:trimmed_data_line() space()? line_break()? { l }
 
 }}

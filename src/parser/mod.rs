@@ -346,21 +346,21 @@ impl<E: PropertyAccess> Parser<E> {
                 )),
         };
 
-        let mut elem_it : Iter<String> = elems.iter();
+        let mut elem_it: Iter<&str> = elems.iter();
         let mut vals = E::new();
         for (k, p) in &element_def.properties {
-            let new_p : Property = self.__read_ascii_property(&mut elem_it, &p.data_type)?;
+            let new_p: Property = self.__read_ascii_property(&mut elem_it, &p.data_type)?;
             vals.set_property(k, new_p);
         }
         Ok(vals)
     }
-    fn __read_ascii_property(&self, elem_iter: &mut Iter<String>, data_type: &PropertyType) -> Result<Property> {
-        let s : &String = match elem_iter.next() {
+    fn __read_ascii_property(&self, elem_iter: &mut Iter<&str>, data_type: &PropertyType) -> Result<Property> {
+        let s: &str = match elem_iter.next() {
             None => return Err(io::Error::new(
                 ErrorKind::InvalidInput,
                 format!("Expected element of type '{:?}', but found nothing.", data_type)
             )),
-            Some(x) => x
+            Some(x) => x,
         };
 
         let result = match *data_type {
@@ -375,7 +375,7 @@ impl<E: PropertyAccess> Parser<E> {
                 ScalarType::Double => Property::Double(self.parse(s)?),
             },
             PropertyType::List(_, ref scalar_type) => {
-                let count : usize = self.parse(s)?;
+                let count: usize = self.parse(s)?;
                 match *scalar_type {
                     ScalarType::Char => Property::ListChar(self.__read_ascii_list(elem_iter, count)?),
                     ScalarType::UChar => Property::ListUChar(self.__read_ascii_list(elem_iter, count)?),
@@ -400,7 +400,7 @@ impl<E: PropertyAccess> Parser<E> {
                 format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e))),
         }
     }
-    fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<String>, count: usize) -> Result<Vec<D>>
+    fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
         let mut out: Vec<D> = Vec::with_capacity(count);
         for i in 0..count {
@@ -754,7 +754,7 @@ mod tests {
             g::data_line("034 8e3 8e-3"),
             vec!["034", "8e3", "8e-3"]
         );
-        assert_ok!(g::data_line(""), Vec::<String>::new());
+        assert_ok!(g::data_line(""), Vec::<&str>::new());
     }
     #[test]
     fn data_line_err() {
