@@ -172,16 +172,8 @@ impl<E: PropertyAccess> Parser<E> {
         match self.__read_header_line(&line_str) {
             Ok(Line::MagicNumber) => (),
             Ok(l) => return parse_ascii_error(location, &line_str, &format!("Expected magic number 'ply', but saw '{:?}'.", l)),
-            Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Expected magic number 'ply'.")
+            Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Expected magic number 'ply'."),
         }
-        match grammar::line(&line_str) {
-            Err(e) => return Err(io::Error::new(ErrorKind::InvalidInput, e)),
-            Ok(l @ Line::MagicNumber) => l,
-            Ok(ob) => return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                format!("Invalid line encountered. Expected type: 'Line::MagicNumber', found: '{:?}'", ob)
-            )),
-        };
 
         let mut header_form_ver : Option<(Encoding, Version)> = None;
         let mut header_obj_infos = Vec::<ObjInfo>::new();
@@ -327,7 +319,8 @@ use std::marker;
 impl<E: PropertyAccess> Parser<E> {
     fn __read_ascii_payload_for_element<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(element_def.count);
-        let mut line_str = String::with_capacity(16);
+        // Pre-allocate a reasonably sized buffer to avoid frequent growth for typical lines
+        let mut line_str = String::with_capacity(128);
         for _ in 0..element_def.count {
             line_str.clear();
             reader.read_line(&mut line_str)?;
@@ -409,20 +402,28 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<String>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
-        let list: Result<Vec<D>> = elem_iter
-            .take(count)
-            .enumerate()
-            .map(|(i, s)| {
-                s.parse().map_err(|err| {
-                    io::Error::new(
+        let mut out: Vec<D> = Vec::with_capacity(count);
+        for i in 0..count {
+            let s = match elem_iter.next() {
+                Some(s) => s,
+                None => {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("Expected {} list elements, but found only {}.", count, i),
+                    ))
+                }
+            };
+            match s.parse() {
+                Ok(v) => out.push(v),
+                Err(err) => {
+                    return Err(io::Error::new(
                         ErrorKind::InvalidInput,
                         format!("Couldn't parse element at index {}: {:?}", i, err),
-                    )
-                })
-            })
-            .collect();
-
-        list
+                    ));
+                }
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -525,7 +526,7 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_binary_list<T: Read, D: FromStr>(&self, reader: &mut T, read_from: &dyn Fn(&mut T) -> Result<D>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
-        let mut list = Vec::<D>::new();
+        let mut list = Vec::<D>::with_capacity(count);
         for i in 0..count {
             let value : D = match read_from(reader) {
                 Err(e) => return Err(io::Error::new(
