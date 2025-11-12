@@ -1,9 +1,9 @@
-use linked_hash_map::LinkedHashMap;
+use indexmap::IndexMap;
 use super::ElementDef;
 use super::PropertyDef;
 
-/// Alias to reduce coupling with `LinkedHashMap`
-pub type KeyMap<V> = LinkedHashMap<String, V>;
+/// Alias to reduce coupling with map implementation
+pub type KeyMap<V> = IndexMap<String, V>;
 
 /// Convenience trait to assure consistency between map key and name attribute of stored element.
 pub trait Addable<V: Key> {

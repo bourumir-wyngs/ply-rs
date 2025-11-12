@@ -1,4 +1,3 @@
-extern crate ply_rs_bw;
 use ply_rs_bw::*;
 
 type Ply = ply::Ply<ply::DefaultElement>;

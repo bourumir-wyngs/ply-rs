@@ -1,4 +1,3 @@
-extern crate ply_rs_bw;
 use ply_rs_bw::ply::{ Ply, DefaultElement, Encoding, ElementDef, PropertyDef, PropertyType, ScalarType, Property, Addable };
 use ply_rs_bw::writer::{ Writer };
 

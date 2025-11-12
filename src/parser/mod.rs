@@ -56,7 +56,7 @@ use std::marker::PhantomData;
 ///
 /// If you need finer control, you can start splitting the read operations down to the line/element level.
 ///
-/// In the follwoing case we first read the header, and then continue with the payload.
+/// In the following case we first read the header, and then continue with the payload.
 /// We need to build a Ply our selves.
 ///
 /// ```rust
@@ -232,7 +232,7 @@ impl<E: PropertyAccess> Parser<E> {
                             &format!("Property '{:?}' found without preceding element.", p)
                         );
                     } else {
-                        let (_, mut e) = header_elements.pop_back().unwrap();
+                        let (_, mut e) = header_elements.pop().unwrap();
                         e.properties.add(p);
                         header_elements.add(e);
                     }

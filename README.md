@@ -24,7 +24,7 @@ This breaking change necessitates incrementing the major version number. Accordi
 
 ***
 
-Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Standford Triangle Format). The library supports all three subformats: ASCII, big endian, and little endian.
+Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats: ASCII, big endian, and little endian.
 
 It focuses on two main points:
 
@@ -45,8 +45,6 @@ ply-rs-bw = "2.0"
 Add to your root:
 
 ```rust
-extern crate ply_rs_bw;
-
 fn main() {}
 ```
 
@@ -55,7 +53,6 @@ fn main() {}
 This is the easiest way to read a ply file:
 
 ```rust,no_run
-extern crate ply_rs_bw;
 use ply_rs_bw as ply;
 
 /// Demonstrates simplest use case for reading from a file.
@@ -86,7 +83,6 @@ fn main() {
 The simplest case of writing a ply file:
 
 ```rust
-extern crate ply_rs_bw;
 use ply_rs_bw::ply::{ Ply, DefaultElement };
 use ply_rs_bw::writer::{ Writer };
 
