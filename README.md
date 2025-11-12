@@ -33,29 +33,11 @@ It focuses on two main points:
 
 ## Getting started
 
-### Dependency
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-ply-rs-bw = "2.0"
-```
-
-Add to your root:
-
-```rust
-fn main() {}
-```
-
-### Read a ply file
-
 This is the easiest way to read a ply file:
 
-```rust,no_run
+```rust
 use ply_rs_bw as ply;
 
-/// Demonstrates simplest use case for reading from a file.
 fn main() {
     //Set up a reader, in this case, a file.
     let path = "example_plys/greg_turk_example1_ok_ascii.ply";
