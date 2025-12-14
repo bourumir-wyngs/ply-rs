@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 /*#![warn(missing_docs,
         missing_debug_implementations,
         missing_copy_implementations,
