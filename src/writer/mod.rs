@@ -87,7 +87,7 @@ impl<E: PropertyAccess> Writer<E> {
         let mut written = 0;
         written += self.write_header(out, &ply.header)?;
         written += self.write_payload(out, &ply.payload, &ply.header)?;
-        out.flush().unwrap();
+        out.flush()?;
         Ok(written)
     }
     fn write_new_line<T: Write>(&self, out: &mut T) -> Result<usize> {
