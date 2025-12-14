@@ -2,10 +2,10 @@ use crate::ply::{ PropertyDef, PropertyType, ScalarType, Encoding, Version, Comm
 #[derive(Debug, PartialEq, Clone)]
 pub enum Line {
     MagicNumber,
-    Format((Encoding, Version)),
+    Format((Encoding, Option<Version>)),
     Comment(Comment),
     ObjInfo(ObjInfo),
-    Element(ElementDef),
+    Element(Option<ElementDef>),
     Property(PropertyDef),
     EndHeader
 }
@@ -19,8 +19,10 @@ pub rule number() -> String
 
 rule space() = [' '|'\t']+
 
-rule uint() -> u64
-	= n:$(['0'..='9']+) { n.parse().unwrap() }
+rule uint() -> Option<u64>
+    = n:$(['0'..='9']+) {
+        n.parse::<u64>().ok()
+    }
 
 rule ident() -> String
 	= s:$(['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'0'..='9'|'_'|'-']*) { s.to_string() }
@@ -58,18 +60,20 @@ rule data_type() -> PropertyType
 pub rule magic_number()
 	= "ply"
 
-pub rule format() -> (Encoding, Version)
+pub rule format() -> (Encoding, Option<Version>)
 	= "format" space() "ascii" space() v:version() { (Encoding::Ascii, v) }
 	/ "format" space() "binary_big_endian" space() v:version() { (Encoding::BinaryBigEndian, v) }
 	/ "format" space() "binary_little_endian" space() v:version() { (Encoding::BinaryLittleEndian, v) }
 
-rule version() -> Version
-	= maj:uint() "." min:uint() {
-		Version {
-			major: maj as u16,
-			minor: min as u8,
-		}
-	}
+rule version() -> Option<Version>
+    = maj:uint() "." min:uint() {{
+        let maj = maj?;
+        let min = min?;
+        Some(Version {
+            major: u16::try_from(maj).ok()?,
+            minor: u8::try_from(min).ok()?,
+        })
+    }}
 
 pub rule comment() -> Comment
 	= "comment" space() c:text() {
@@ -87,12 +91,15 @@ pub rule obj_info() -> ObjInfo
 	    String::new()
 	}
 
-pub rule element() -> ElementDef
-	= "element" space() id:$(ident()) space() n:uint() {
-		let mut e = ElementDef::new(id.to_string());
-		e.count = n as usize;
-		e
-	}
+pub rule element() -> Option<ElementDef>
+    = "element" space() id:ident() space() n:uint() {{
+        let n = n?;
+        let count = usize::try_from(n).ok()?;
+
+        let mut e = ElementDef::new(id);
+        e.count = count;
+        Some(e)
+    }}
 
 pub rule property() -> PropertyDef
 	= "property" space() data_type:data_type() space() id:ident() {

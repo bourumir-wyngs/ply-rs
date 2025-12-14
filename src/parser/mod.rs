@@ -175,7 +175,7 @@ impl<E: PropertyAccess> Parser<E> {
             Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Expected magic number 'ply'."),
         }
 
-        let mut header_form_ver : Option<(Encoding, Version)> = None;
+        let mut header_form_ver : Option<(Encoding, Option<Version>)> = None;
         let mut header_obj_infos = Vec::<ObjInfo>::new();
         let mut header_elements = KeyMap::<ElementDef>::new();
         let mut header_comments = Vec::<Comment>::new();
@@ -189,11 +189,8 @@ impl<E: PropertyAccess> Parser<E> {
                 Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Couldn't parse line."),
                 Ok(Line::MagicNumber) => return parse_ascii_error(location, &line_str, "Unexpected 'ply' found."),
                 Ok(Line::Format(ref t)) =>
-                    if header_form_ver.is_none() {
-                        header_form_ver = Some(t.clone());
-                    } else {
-                        let f = header_form_ver.unwrap();
-                        if f != *t {
+                    if let Some(f) = header_form_ver.as_ref() {
+                        if f != t {
                             return parse_ascii_error(
                                 location,
                                 &line_str,
@@ -202,9 +199,15 @@ impl<E: PropertyAccess> Parser<E> {
                                     \tEncoding: {:?}, Version: {:?}\n\
                                     previous definition:\n\
                                     \tEncoding: {:?}, Version: {:?}",
-                                    t.0, t.1, f.0, f.1)
-                            )
+                                    t.0, t.1, f.0, f.1
+                                ),
+                            );
                         }
+                        if f.1.is_none() {
+                            return parse_ascii_error(location, &line_str, "Invalid version");
+                        }
+                    } else {
+                        header_form_ver = Some(t.clone());
                     }
                 ,
                 Ok(Line::ObjInfo(ref o)) =>
@@ -214,7 +217,12 @@ impl<E: PropertyAccess> Parser<E> {
                     header_comments.push(c.clone())
                 ,
                 Ok(Line::Element(ref e)) => {
-                    header_elements.add(e.clone())
+                    if let Some(e) = e {
+                        header_elements.add(e.clone())
+                    } else {
+                        return parse_ascii_error(location, &line_str, "Invalid element");
+                    }
+
                 },
                 Ok(Line::Property(p)) =>
                     if header_elements.is_empty() {
@@ -233,16 +241,28 @@ impl<E: PropertyAccess> Parser<E> {
             };
             location.next_line();
         }
-        if header_form_ver.is_none() {
+
+        let (encoding, version) = if let Some((encoding, version)) = header_form_ver {
+            (encoding, version)
+        } else {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
-                "No format line found."
+                "No format line found.",
             ));
-        }
-        let (encoding, version) = header_form_ver.unwrap();
+        };
+
+        let version = if let Some(version) = version {
+            version
+        } else {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "Invalid version number.",
+            ));
+        };
+
         Ok(Header{
-            encoding: encoding,
-            version: version,
+            encoding,
+            version,
             obj_infos: header_obj_infos,
             comments: header_comments,
             elements: header_elements
@@ -291,22 +311,6 @@ impl<E: PropertyAccess> Parser<E> {
         Ok(payload)
     }
 }
-
-
-
-// ////////////////////////////////////////////////////////////////
-// # Ascii
-// ////////////////////////////////////////////////////////////////
-
-/*
-use std::io;
-use std::io::{ BufRead, Result, ErrorKind };
-use super::Parser;
-use super::grammar;
-use super::parse_ascii_rethrow;
-use util::LocationTracker;
-use ply::{ PropertyAccess, ElementDef };
-// */
 
 use std::slice::Iter;
 use std::str::FromStr;
@@ -648,15 +652,19 @@ mod tests {
     fn format_ok() {
         assert_ok!(
             g::format("format ascii 1.0"),
-            (Encoding::Ascii, Version{major: 1, minor: 0})
+            (Encoding::Ascii, Some(Version{major: 1, minor: 0}))
         );
         assert_ok!(
             g::format("format binary_big_endian 2.1"),
-            (Encoding::BinaryBigEndian, Version{major: 2, minor: 1})
+            (Encoding::BinaryBigEndian, Some(Version{major: 2, minor: 1}))
         );
         assert_ok!(
             g::format("format binary_little_endian 1.0"),
-            (Encoding::BinaryLittleEndian, Version{major: 1, minor: 0})
+            (Encoding::BinaryLittleEndian, Some(Version{major: 1, minor: 0}))
+        );
+        assert_ok!(
+            g::format("format binary_little_endian 1.99999999999999999999999999999999999999999999"),
+            (Encoding::BinaryLittleEndian, None)
         );
     }
     #[test]
@@ -702,8 +710,11 @@ mod tests {
     }
     #[test]
     fn element_ok() {
-        let mut e = ElementDef::new("vertex".to_string());
-        e.count = 8;
+        let e = Some(ElementDef {
+            name: "vertex".to_string(),
+            count: 8,
+            properties: Default::default(),
+        });
         assert_ok!(
             g::element("element vertex 8"),
             e
@@ -730,7 +741,7 @@ mod tests {
     #[test]
     fn line_ok() {
         assert_ok!(g::line("ply "), Line::MagicNumber);
-        assert_ok!(g::line("format ascii 1.0 "), Line::Format((Encoding::Ascii, Version{major: 1, minor: 0})));
+        assert_ok!(g::line("format ascii 1.0 "), Line::Format((Encoding::Ascii, Some(Version{major: 1, minor: 0}))));
         assert_ok!(g::line("comment a very nice comment "));
         assert_ok!(g::line("element vertex 8 "));
         assert_ok!(g::line("property float x "));
