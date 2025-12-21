@@ -93,11 +93,8 @@ pub rule obj_info() -> ObjInfo
 
 pub rule element() -> Option<ElementDef>
     = "element" space() id:ident() space() n:uint() {{
-        let n = n?;
-        let count = usize::try_from(n).ok()?;
-
         let mut e = ElementDef::new(id);
-        e.count = count;
+        e.count = usize::try_from(n?).ok()?;
         Some(e)
     }}
 
