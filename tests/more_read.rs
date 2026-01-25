@@ -76,17 +76,23 @@ end_header\n6.28318530718"; // no trailing newline
 #[test]
 fn read_diverse_field_formats() {
     use ply_rs_bw::ply::{PropertyType, ScalarType};
-    let cases = vec![
-        ("example_plys/diverse_field_formats/floats_ints.ply", ScalarType::Float, ScalarType::Int),
-        ("example_plys/diverse_field_formats/floats_shorts.ply", ScalarType::Float, ScalarType::Short),
-        ("example_plys/diverse_field_formats/doubles_ints.ply", ScalarType::Double, ScalarType::Int),
-        ("example_plys/diverse_field_formats/doubles_shorts.ply", ScalarType::Double, ScalarType::Short),
+
+    // Use include_bytes! to embed files at compile time, avoiding filesystem access.
+    // This is done for Miri compatibility, as Miri's isolation mode doesn't support file I/O.
+    const FLOATS_INTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/floats_ints.ply");
+    const FLOATS_SHORTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/floats_shorts.ply");
+    const DOUBLES_INTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/doubles_ints.ply");
+    const DOUBLES_SHORTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/doubles_shorts.ply");
+
+    let cases: Vec<(&[u8], ScalarType, ScalarType)> = vec![
+        (FLOATS_INTS, ScalarType::Float, ScalarType::Int),
+        (FLOATS_SHORTS, ScalarType::Float, ScalarType::Short),
+        (DOUBLES_INTS, ScalarType::Double, ScalarType::Int),
+        (DOUBLES_SHORTS, ScalarType::Double, ScalarType::Short),
     ];
 
-    for (path, coord_ty, idx_ty) in cases {
-        let mut f = std::fs::File::open(path).expect("fixture should exist");
-        let p = parser::Parser::<ply::DefaultElement>::new();
-        let ply = p.read_ply(&mut f).expect("should parse");
+    for (data, coord_ty, idx_ty) in cases {
+        let ply = read_from_bytes(data);
         assert_eq!(ply.header.encoding, ply::Encoding::BinaryLittleEndian);
         assert_eq!(ply.header.elements["vertex"].count, 3);
         assert_eq!(ply.header.elements["face"].count, 1);
