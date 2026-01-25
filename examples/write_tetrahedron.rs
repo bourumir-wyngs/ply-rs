@@ -23,6 +23,34 @@ fn main() {
     // Display the written PLY file content
     let output = String::from_utf8(buf).unwrap();
     println!("Written PLY data:\n{}", output);
+
+    // Demonstrate binary writing (skipped under Miri)
+    #[cfg(not(miri))]
+    {
+        let binary_buf = write_ply_binary(&ply);
+        println!("\nBinary PLY: {} bytes written", binary_buf.len());
+    }
+}
+
+/// Writes a PLY object in binary little endian format (the most popular binary format).
+///
+/// Binary little endian is the most widely supported binary PLY format as it matches
+/// the native byte order of most modern systems (x86, x64, ARM).
+///
+/// # Arguments
+/// * `ply` - The PLY object to write
+///
+/// # Returns
+/// A byte vector containing the binary PLY data
+#[cfg(not(miri))]
+fn write_ply_binary(ply: &Ply<DefaultElement>) -> Vec<u8> {
+    let mut buf = Vec::<u8>::new();
+    let mut ply_binary = ply.clone();
+    ply_binary.header.encoding = Encoding::BinaryLittleEndian;
+
+    let w = Writer::new();
+    w.write_ply(&mut buf, &mut ply_binary).unwrap();
+    buf
 }
 
 /// Creates a PLY object representing a regular tetrahedron.

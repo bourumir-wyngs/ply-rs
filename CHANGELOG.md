@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2.0.4
+## [2.0.4] - 2026-01-25
 
 ### Added
 - `Default` implementations for `Parser`, `Ply`, `Header`, and `Writer`
@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SECURITY.md` with private vulnerability reporting guidance
 - RustSec dependency audit GitHub Actions step (`rustsec/audit-check@v2`)
 - Minimal fuzzing harness (`fuzz/`) with `read_ply` and `read_header` targets
+- Miri checks (tests fixed to access data in miri-compatible way)
 - Regression tests for crash-resistance and error-handling edge cases:
   - EOF before `end_header`
   - ASCII payload EOF
   - negative list length in binary payload
+- Binary format write tests (working functionality existed but was not test-covered) 
 
 ### Changed
 - Simplified code in `ply_grammar.rs` rule_element
