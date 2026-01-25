@@ -5,13 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] - 2026-01-25
+## [3.0.0] - 2026-01-25
 
-### Changed
-- Improved `PropertyAccess` trait by changing all `&String` parameters to `&str`
-- This change is **backwards compatible** — existing code using `&String` continues to work due to Rust's `Deref` coercion
-- Follows idiomatic Rust practices (recommended by Clippy's `ptr_arg` lint)
-- Provides more flexibility: callers can now pass string literals directly without creating a `String`
+### Breaking changes
+- `ply::PropertyAccess`: changed all property-name parameters from `&String` to `&str` (including `set_property` and all getters). This is a breaking change for crates that implement `PropertyAccess` (callers passing `&String` continue to work via deref coercion).
+- `parser::ply_grammar::Line` (returned by `parser::Parser::read_header_line`): variant payloads changed:
+  - `Line::Format((Encoding, Version))` -> `Line::Format((Encoding, Option<Version>))`
+  - `Line::Element(ElementDef)` -> `Line::Element(Option<ElementDef>)`
+  Downstream code pattern-matching on these variants must be updated to handle `Option`.
 
 ## [2.0.4] - 2026-01-25
 
