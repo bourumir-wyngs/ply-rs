@@ -1,0 +1,48 @@
+name: Fuzz & Audit
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+  workflow_dispatch:
+  schedule:
+    # Nightly-ish (03:17 UTC) to catch newly disclosed RustSec advisories and fuzz regressions.
+    - cron: "17 3 * * *"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    name: Security audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Security audit (RustSec)
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  fuzz:
+    name: Fuzz (smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Build fuzz targets
+        run: cargo fuzz build
+
+      # Keep this bounded so CI remains predictable.
+      - name: "Run fuzz target: read_ply (bounded)"
+        run: cargo fuzz run read_ply -- -runs=1000
+
+      - name: "Run fuzz target: read_header (bounded)"
+        run: cargo fuzz run read_header -- -runs=1000
