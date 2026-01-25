@@ -102,88 +102,88 @@ pub trait PropertyAccess {
     fn new() -> Self;
 
     /// Sets the property value for the given property name.
-    fn set_property(&mut self, _property_name: &String, _property: Property) {
+    fn set_property(&mut self, _property_name: &str, _property: Property) {
         // By default, do nothing
         // Sombody might only want to write, no point in bothering him/her with setter implementations.
     }
 
     /// Returns the property value as a signed 8-bit integer (`char`).
-    fn get_char(&self, _property_name: &String) -> Option<i8> {
+    fn get_char(&self, _property_name: &str) -> Option<i8> {
         None
     }
 
     /// Returns the property value as an unsigned 8-bit integer (`uchar`).
-    fn get_uchar(&self, _property_name: &String) -> Option<u8> {
+    fn get_uchar(&self, _property_name: &str) -> Option<u8> {
         None
     }
 
     /// Returns the property value as a signed 16-bit integer (`short`).
-    fn get_short(&self, _property_name: &String) -> Option<i16> {
+    fn get_short(&self, _property_name: &str) -> Option<i16> {
         None
     }
 
     /// Returns the property value as an unsigned 16-bit integer (`ushort`).
-    fn get_ushort(&self, _property_name: &String) -> Option<u16> {
+    fn get_ushort(&self, _property_name: &str) -> Option<u16> {
         None
     }
 
     /// Returns the property value as a signed 32-bit integer (`int`).
-    fn get_int(&self, _property_name: &String) -> Option<i32> {
+    fn get_int(&self, _property_name: &str) -> Option<i32> {
         None
     }
 
     /// Returns the property value as an unsigned 32-bit integer (`uint`).
-    fn get_uint(&self, _property_name: &String) -> Option<u32> {
+    fn get_uint(&self, _property_name: &str) -> Option<u32> {
         None
     }
 
     /// Returns the property value as a 32-bit floating point number (`float`).
-    fn get_float(&self, _property_name: &String) -> Option<f32> {
+    fn get_float(&self, _property_name: &str) -> Option<f32> {
         None
     }
 
     /// Returns the property value as a 64-bit floating point number (`double`).
-    fn get_double(&self, _property_name: &String) -> Option<f64> {
+    fn get_double(&self, _property_name: &str) -> Option<f64> {
         None
     }
 
     /// Returns the property value as a list of signed 8-bit integers.
-    fn get_list_char(&self, _property_name: &String) -> Option<&[i8]> {
+    fn get_list_char(&self, _property_name: &str) -> Option<&[i8]> {
         None
     }
 
     /// Returns the property value as a list of unsigned 8-bit integers.
-    fn get_list_uchar(&self, _property_name: &String) -> Option<&[u8]> {
+    fn get_list_uchar(&self, _property_name: &str) -> Option<&[u8]> {
         None
     }
 
     /// Returns the property value as a list of signed 16-bit integers.
-    fn get_list_short(&self, _property_name: &String) -> Option<&[i16]> {
+    fn get_list_short(&self, _property_name: &str) -> Option<&[i16]> {
         None
     }
 
     /// Returns the property value as a list of unsigned 16-bit integers.
-    fn get_list_ushort(&self, _property_name: &String) -> Option<&[u16]> {
+    fn get_list_ushort(&self, _property_name: &str) -> Option<&[u16]> {
         None
     }
 
     /// Returns the property value as a list of signed 32-bit integers.
-    fn get_list_int(&self, _property_name: &String) -> Option<&[i32]> {
+    fn get_list_int(&self, _property_name: &str) -> Option<&[i32]> {
         None
     }
 
     /// Returns the property value as a list of unsigned 32-bit integers.
-    fn get_list_uint(&self, _property_name: &String) -> Option<&[u32]> {
+    fn get_list_uint(&self, _property_name: &str) -> Option<&[u32]> {
         None
     }
 
     /// Returns the property value as a list of 32-bit floating point numbers.
-    fn get_list_float(&self, _property_name: &String) -> Option<&[f32]> {
+    fn get_list_float(&self, _property_name: &str) -> Option<&[f32]> {
         None
     }
 
     /// Returns the property value as a list of 64-bit floating point numbers.
-    fn get_list_double(&self, _property_name: &String) -> Option<&[f64]> {
+    fn get_list_double(&self, _property_name: &str) -> Option<&[f64]> {
         None
     }
 }

@@ -24,6 +24,12 @@ into
 
 This breaking change necessitates incrementing the major version number. According to the author, this optimization reduces the time required to read 80,000 points from 450ms to 90ms, which is a significant improvement. The pull request has been reviewed and approved by our team.
 
+Version 2.1.0 further improves the `PropertyAccess` trait by changing all `&String` parameters to `&str`:
+
+`fn set_property(&mut self, _property_name: &str, _property: Property)`
+
+This change is **backwards compatible** — existing code using `&String` will continue to work without modification, as Rust's `Deref` trait automatically coerces `&String` to `&str`. This is the idiomatic Rust approach (recommended by Clippy's `ptr_arg` lint) and provides more flexibility, allowing callers to pass string literals directly without creating a `String`.
+
 ***
 
 Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. See [`examples/write_tetrahedron.rs`](examples/write_tetrahedron.rs) for a demonstration of writing binary PLY files.
