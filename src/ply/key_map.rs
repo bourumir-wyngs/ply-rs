@@ -1,3 +1,9 @@
+//! Map and helper traits used throughout the crate.
+//!
+//! The PLY format is inherently dynamic (elements/properties are declared in the
+//! header). This module provides the [`KeyMap`] alias (currently backed by
+//! [`indexmap::IndexMap`]) and small helper traits used to keep names consistent.
+
 use indexmap::IndexMap;
 use super::ElementDef;
 use super::PropertyDef;

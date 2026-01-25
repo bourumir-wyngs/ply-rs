@@ -1,9 +1,9 @@
 use ply_rs_bw as ply;
 
-/// Sometimes only the meta data is interesting to us.
-/// Reading the entire ply file would be a waste of ressources.
+/// Sometimes only the metadata is interesting to us.
+/// Reading the entire PLY file would be a waste of resources.
 fn main() {
-    // set up a reader, in this a file.
+    // set up a reader, in this case a file.
     let path = "example_plys/greg_turk_example1_ok_ascii.ply";
     let f = std::fs::File::open(path).unwrap();
 

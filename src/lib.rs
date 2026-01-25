@@ -19,7 +19,7 @@
 //! Simplicity is provided by giving you high level operations and ready to use data structures:
 //!
 //! - Read an entire PLY file with `read_ply(reader)`, see the Parser module.
-//! - Write an entire PLY with `ẁrite_ply(target, ply)`, se the Writer module.
+//! - Write an entire PLY file with `write_ply(target, ply)`, see the Writer module.
 //! - Don't care about data types: `DefaultElement` is a map (index-preserving) where you access elements with String keys.
 //!
 //! Performance can be achieved by using the finer granular methods and your own structs:

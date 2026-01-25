@@ -81,7 +81,7 @@ impl<E: PropertyAccess> Ply<E> {
         }
         for oi in &self.header.obj_infos {
             if has_line_break(oi) {
-                return Err(ConsistencyError::new(&format!("Objection information `{}` should not contain any line breaks.", oi)));
+                return Err(ConsistencyError::new(&format!("Object information `{}` should not contain any line breaks.", oi)));
             }
         }
         for c in &self.header.comments {

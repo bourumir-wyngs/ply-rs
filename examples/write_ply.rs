@@ -1,12 +1,12 @@
 use ply_rs_bw::ply::{ Ply, DefaultElement, Encoding, ElementDef, PropertyDef, PropertyType, ScalarType, Property, Addable };
 use ply_rs_bw::writer::{ Writer };
 
-/// Demonstrates simplest use case for reading from a file.
+/// Demonstrates simplest use case for writing to a file.
 fn main() {
     // set up a target, could also be a file
     let mut buf = Vec::<u8>::new();
 
-    // crete a ply objet
+    // create a ply object
     let mut ply = {
         let mut ply = Ply::<DefaultElement>::new();
         ply.header.encoding = Encoding::Ascii;

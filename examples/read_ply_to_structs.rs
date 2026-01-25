@@ -78,7 +78,7 @@ fn main() {
         match element.name.as_ref() {
             "vertex" => {vertex_list = vertex_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
             "face" => {face_list = face_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
-            _ => panic!("Unexpeced element!"),
+            _ => panic!("Unexpected element!"),
         }
     }
 

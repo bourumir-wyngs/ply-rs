@@ -1,3 +1,8 @@
+//! Core data structures representing a PLY file.
+//!
+//! This module defines [`Ply`], its [`Header`], and the type definitions needed to
+//! describe element/property declarations.
+
 use std::fmt::{ Display, Formatter };
 use std::fmt;
 use super::PropertyType;
@@ -11,10 +16,10 @@ use super::PropertyAccess;
 pub struct Ply<E: PropertyAccess> {
     /// All header information found in a PLY file.
     pub header: Header,
-    /// The payloud found after the `end_header` line in a PLY file.
+    /// The payload found after the `end_header` line in a PLY file.
     ///
-    /// One line in an ascii PLY file corresponds to a single element.
-    /// The payload groups elments with the same type together in a vector.
+    /// One line in an ASCII PLY file corresponds to a single element.
+    /// The payload groups elements with the same type together in a vector.
     ///
     /// # Examples
     ///
@@ -59,6 +64,7 @@ pub struct Header {
     ///
     /// The only existing standard is 1.0.
     pub version: Version,
+    /// Arbitrary object metadata lines (`obj_info ...`) as found in the header.
     pub obj_infos: Vec<ObjInfo>,
     /// Ordered map of elements as they appear in the payload.
     pub elements: KeyMap<ElementDef>,
@@ -73,8 +79,8 @@ impl Default for Header {
 }
 
 impl Header {
-    /// Constructs an empty `Header` using Ascii encoding and version 1.0.
-    /// No object informations, elements or comments are set.
+    /// Constructs an empty `Header` using ASCII encoding and version 1.0.
+    /// No object information, elements, or comments are set.
     pub fn new() -> Self {
         Header {
             encoding: Encoding::Ascii,
@@ -86,7 +92,7 @@ impl Header {
     }
 }
 
-/// Alias to give object informations an explicit type.
+/// Alias to give object information an explicit type.
 pub type ObjInfo = String;
 
 /// Alias to give comments an explicit type.
@@ -94,10 +100,12 @@ pub type Comment = String;
 
 /// Models a version number.
 ///
-/// At time of writing, the only existin version for a PLY file is "1.0".
+/// At time of writing, the only existing version for a PLY file is "1.0".
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Version {
+    /// Major version number.
     pub major: u16,
+    /// Minor version number.
     pub minor: u8,
 }
 
@@ -163,7 +171,7 @@ impl ElementDef {
     ///
     /// The name should be unique for each element in a PLY file.
     ///
-    /// You should never need to set `count` manuall, since it is set by the consistency check (see `make_consistent()` of `Ply`).
+    /// You should never need to set `count` manually, since it is set by the consistency check (see `make_consistent()` of `Ply`).
     ///
     /// No properties are set.
     pub fn new(name: String) -> Self {
@@ -184,7 +192,7 @@ pub struct PropertyDef {
     pub name: String,
     /// Data type of the property:
     /// You can have simple scalars (ints, floats, etc.) or lists of scalars.
-    /// In the case of lists you need to decide in which type you want to store the list length and what type to use for the list elemetns.
+    /// In the case of lists you need to decide in which type you want to store the list length and what type to use for the list elements.
     pub data_type: PropertyType,
 }
 

@@ -1,12 +1,28 @@
+//! PEG grammar for parsing PLY headers and ASCII data lines.
+//!
+//! This module is an internal implementation detail, but some types (e.g. [`Line`])
+//! may surface through low-level APIs such as `Parser::read_header_line`.
+
 use crate::ply::{ PropertyDef, PropertyType, ScalarType, Encoding, Version, Comment, ObjInfo,ElementDef };
 #[derive(Debug, PartialEq, Clone)]
+/// A single parsed header line.
+///
+/// This is used internally by the header parser to represent the different
+/// kinds of statements that can occur in a PLY header.
 pub enum Line {
+    /// The `ply` magic number line.
     MagicNumber,
+    /// A `format <encoding> <version>` line.
     Format((Encoding, Option<Version>)),
+    /// A `comment ...` line.
     Comment(Comment),
+    /// An `obj_info ...` line.
     ObjInfo(ObjInfo),
+    /// An `element <name> <count>` line.
     Element(Option<ElementDef>),
+    /// A `property ...` line.
     Property(PropertyDef),
+    /// The `end_header` terminator line.
     EndHeader
 }
 

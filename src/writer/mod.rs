@@ -37,7 +37,7 @@ use crate::ply::PropertyAccess;
 /// let written = w.write_ply(&mut buf, &mut ply).unwrap();
 /// ```
 pub struct Writer<E: PropertyAccess> {
-    /// Should be fairly efficient, se `as_bytes()` in https://doc.rust-lang.org/src/collections/string.rs.html#1001
+    /// Should be fairly efficient, see `as_bytes()` in https://doc.rust-lang.org/src/collections/string.rs.html#1001
     new_line: String,
     phantom: PhantomData<E>,
 }
@@ -70,7 +70,7 @@ impl<E: PropertyAccess> Writer<E> {
             phantom: PhantomData,
         }
     }
-    /// Writes an entire PLY file modeled by `ply` to `out`, performs consistency chekc.
+    /// Writes an entire PLY file modeled by `ply` to `out`, performs consistency check.
     ///
     /// `ply` must be mutable since a consistency check is performed.
     /// If problems can be corrected automatically, `ply` will be modified accordingly.
@@ -83,7 +83,7 @@ impl<E: PropertyAccess> Writer<E> {
         };
         self.write_ply_unchecked(out, ply)
     }
-    /// Writes an entire PLY file modeled by `ply` to `out`, performes no consistency check.
+    /// Writes an entire PLY file modeled by `ply` to `out`, performs no consistency check.
     ///
     /// Like `write_ply` but doesn't check the input for inconsistency.
     /// The user is responsible to provide a consistent `Ply`,
@@ -145,7 +145,7 @@ impl<E: PropertyAccess> Writer<E> {
     }
     /// Writes an object information line.
     ///
-    /// An object informatio line must not contain a line break an only consist of ascii characters.
+    /// An object information line must not contain a line break and only consist of ASCII characters.
     pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> Result<usize> {
         let mut written = 0;
         written += out.write(format!("obj_info {}", obj_info).as_bytes())?;
@@ -164,7 +164,7 @@ impl<E: PropertyAccess> Writer<E> {
         written += self.write_new_line(out)?;
         Ok(written)
     }
-    /// Writes a property line form the header: "property [list <index_type> <scalar_type> | <scalar_type> ]"
+    /// Writes a property line from the header: "property [list <index_type> <scalar_type> | <scalar_type> ]"
     ///
     /// Make sure the property definition is consistent with the payload.
     pub fn write_line_property_definition<T: Write>(&self, out: &mut T, property: &PropertyDef) -> Result<usize> {
@@ -266,7 +266,7 @@ use crate::ply::Payload;
 /// # Payload
 // ////////////////////////
 impl<E: PropertyAccess> Writer<E> {
-    /// Writes the payload of a `ply` (`ply.playload`).
+    /// Writes the payload of a `ply` (`ply.payload`).
     ///
     /// Make sure the Header is consistent with the payload.
     pub fn write_payload<T: Write>(&self, out: &mut T, payload: &Payload<E>, header: &Header) -> Result<usize> {
@@ -278,7 +278,7 @@ impl<E: PropertyAccess> Writer<E> {
         }
         Ok(written)
     }
-    /// Write all elments as stored in the `element_list`.
+    /// Write all elements as stored in the `element_list`.
     ///
     /// Make sure the header and the element definition is consistent with the payload.
     pub fn write_payload_of_element<T: Write>(&self, out: &mut T, element_list: &Vec<E>, element_def: &ElementDef, header: &Header) -> Result<usize> {

@@ -40,3 +40,6 @@ name = "read_diverse_field_types"
 
 [[example]]
 name = "write_empty_ply"
+
+[[example]]
+name = "write_tetrahedron"

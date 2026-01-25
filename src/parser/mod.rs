@@ -57,7 +57,7 @@ use std::marker::PhantomData;
 /// If you need finer control, you can start splitting the read operations down to the line/element level.
 ///
 /// In the following case we first read the header, and then continue with the payload.
-/// We need to build a Ply our selves.
+/// We need to build a Ply ourselves.
 ///
 /// ```rust
 /// # use ply_rs_bw::*;
@@ -158,14 +158,19 @@ use std::result;
 /// #Header
 // ////////////////////////
 impl<E: PropertyAccess> Parser<E> {
-    /// Reads header until and inclusive `end_header`.
+    /// Reads header until and including `end_header`.
     ///
-    /// A ply file starts with "ply\n". The header and the payload are separated by a line `end_header\n`.
-    /// This method reads all headere elemnts up to `end_header`.
+    /// A PLY file starts with "ply\n". The header and the payload are separated by a line `end_header\n`.
+    /// This method reads all header elements up to `end_header`.
     pub fn read_header<T: BufRead>(&self, reader: &mut T) -> Result<Header> {
         let mut line = LocationTracker::new();
         self.__read_header(reader, &mut line)
     }
+
+    /// Parses a single PLY header line.
+    ///
+    /// This is a low-level helper that exposes the header grammar; most callers
+    /// should use [`Parser::read_header`] or [`Parser::read_ply`].
     pub fn read_header_line(&self, line: &str) -> Result<Line> {
         match self.__read_header_line(line) {
             Ok(l) => Ok(l),
@@ -369,7 +374,7 @@ impl<E: PropertyAccess> Parser<E> {
 
             let element = match self.read_ascii_element(&line_str, element_def) {
                 Ok(e) => e,
-                Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Couln't read element line.")
+                Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Couldn't read element line.")
             };
             elems.push(element);
             location.next_line();
@@ -487,14 +492,14 @@ use peg;
 
 /// # Binary
 impl<E: PropertyAccess> Parser<E> {
-    /// Reads a single element as declared in èlement_def. Assumes big endian encoding.
+    /// Reads a single element as declared in `element_def`. Assumes big endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
     pub fn read_big_endian_element<T: Read>(&self, reader: &mut T, element_def: &ElementDef) -> Result<E> {
         // Reduce coupling with ByteOrder
         self.__read_binary_element::<T, BigEndian>(reader, element_def)
     }
-    /// Reads a single element as declared in èlement_def. Assumes big endian encoding.
+    /// Reads a single element as declared in `element_def`. Assumes little endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
     pub fn read_little_endian_element<T: Read>(&self, reader: &mut T, element_def: &ElementDef) -> Result<E> {
