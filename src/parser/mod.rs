@@ -94,6 +94,12 @@ pub struct Parser<E: PropertyAccess> {
       phantom: PhantomData<E>,
 }
 
+impl<E: PropertyAccess> Default for Parser<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 //use std::marker::PhantomData;
 //use std::io::{ Read, BufReader };
@@ -105,9 +111,7 @@ impl<E: PropertyAccess> Parser<E> {
     ///
     /// To get started quickly try `DefaultElement` from the `ply` module.
     pub fn new() -> Self {
-        Parser {
-            phantom: PhantomData
-        }
+        Parser { phantom: PhantomData }
     }
 
     /// Expects the complete content of a PLY file.
@@ -123,6 +127,17 @@ impl<E: PropertyAccess> Parser<E> {
         ply.header = header;
         ply.payload = payload;
         Ok(ply)
+    }
+
+    /// Reads only the header portion of a PLY file (up to and including `end_header`).
+    ///
+    /// If you need to continue reading the payload from the same stream, prefer wrapping
+    /// your reader in a `BufReader` and calling [`Parser::read_header`], because this
+    /// method creates an internal `BufReader` which may buffer past `end_header`.
+    pub fn read_ply_header<T: Read>(&self, source: &mut T) -> Result<Header> {
+        let mut source = BufReader::new(source);
+        let mut location = LocationTracker::new();
+        self.__read_header(&mut source, &mut location)
     }
 }
 
@@ -168,7 +183,12 @@ impl<E: PropertyAccess> Parser<E> {
     fn __read_header<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker) -> Result<Header> {
         location.next_line();
         let mut line_str = String::new();
-        reader.read_line(&mut line_str)?;
+        if reader.read_line(&mut line_str)? == 0 {
+            return Err(io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "Unexpected end of file while reading magic number.",
+            ));
+        }
         match self.__read_header_line(&line_str) {
             Ok(Line::MagicNumber) => (),
             Ok(l) => return parse_ascii_error(location, &line_str, &format!("Expected magic number 'ply', but saw '{:?}'.", l)),
@@ -182,7 +202,15 @@ impl<E: PropertyAccess> Parser<E> {
         location.next_line();
         'readlines: loop {
             line_str.clear();
-            reader.read_line(&mut line_str)?;
+            if reader.read_line(&mut line_str)? == 0 {
+                return Err(io::Error::new(
+                    ErrorKind::UnexpectedEof,
+                    format!(
+                        "Line {}: Unexpected end of file while reading header (missing 'end_header').",
+                        location.line_index
+                    ),
+                ));
+            }
             let line = self.__read_header_line(&line_str);
 
             match line {
@@ -207,7 +235,7 @@ impl<E: PropertyAccess> Parser<E> {
                             return parse_ascii_error(location, &line_str, "Invalid version");
                         }
                     } else {
-                        header_form_ver = Some(t.clone());
+                        header_form_ver = Some(*t);
                     }
                 ,
                 Ok(Line::ObjInfo(ref o)) =>
@@ -271,9 +299,8 @@ impl<E: PropertyAccess> Parser<E> {
 }
 
 // //////////////////////
-/// # Payload
+// # Payload
 // //////////////////////
-
 impl<E: PropertyAccess> Parser<E> {
     /// Reads payload. Encoding is chosen according to the encoding field in `header`.
     pub fn read_payload<T: BufRead>(&self, reader: &mut T, header: &Header) -> Result<Payload<E>> {
@@ -325,9 +352,20 @@ impl<E: PropertyAccess> Parser<E> {
         let mut elems = Vec::<E>::with_capacity(element_def.count);
         // Pre-allocate a reasonably sized buffer to avoid frequent growth for typical lines
         let mut line_str = String::with_capacity(128);
-        for _ in 0..element_def.count {
+        for i in 0..element_def.count {
             line_str.clear();
-            reader.read_line(&mut line_str)?;
+            if reader.read_line(&mut line_str)? == 0 {
+                return Err(io::Error::new(
+                    ErrorKind::UnexpectedEof,
+                    format!(
+                        "Line {}: Unexpected end of file while reading element '{}' (expected {}, got {}).",
+                        location.line_index,
+                        element_def.name,
+                        element_def.count,
+                        i,
+                    ),
+                ));
+            }
 
             let element = match self.read_ascii_element(&line_str, element_def) {
                 Ok(e) => e,
@@ -475,8 +513,26 @@ impl<E: PropertyAccess> Parser<E> {
     fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(element_def.count);
         location.next_line();
-        for _ in 0..element_def.count {
-            let element = self.__read_binary_element::<T, B>(reader, element_def)?;
+        for i in 0..element_def.count {
+            let element = self
+                .__read_binary_element::<T, B>(reader, element_def)
+                .map_err(|e| {
+                    if e.kind() == ErrorKind::UnexpectedEof {
+                        io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            format!(
+                                "Line {}: Unexpected end of file while reading binary element '{}' (expected {}, got {}).\n\tError: {}",
+                                location.line_index,
+                                element_def.name,
+                                element_def.count,
+                                i,
+                                e,
+                            ),
+                        )
+                    } else {
+                        e
+                    }
+                })?;
             elems.push(element);
             location.next_line();
         }
@@ -504,13 +560,48 @@ impl<E: PropertyAccess> Parser<E> {
                 ScalarType::Double => Property::Double(reader.read_f64::<B>()?),
             },
             PropertyType::List(ref index_type, ref property_type) => {
-                let count : usize = match *index_type {
-                    ScalarType::Char => reader.read_i8()? as usize,
-                    ScalarType::UChar => reader.read_u8()? as usize,
-                    ScalarType::Short => reader.read_i16::<B>()? as usize,
-                    ScalarType::UShort => reader.read_u16::<B>()? as usize,
-                    ScalarType::Int => reader.read_i32::<B>()? as usize,
-                    ScalarType::UInt => reader.read_u32::<B>()? as usize,
+                let count: usize = match *index_type {
+                    ScalarType::Char => {
+                        let v = reader.read_i8()?;
+                        if v < 0 {
+                            return Err(io::Error::new(
+                                ErrorKind::InvalidInput,
+                                "List length cannot be negative (i8).",
+                            ));
+                        }
+                        usize::try_from(v as i64).map_err(|_| {
+                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                        })?
+                    }
+                    ScalarType::UChar => usize::from(reader.read_u8()?),
+                    ScalarType::Short => {
+                        let v = reader.read_i16::<B>()?;
+                        if v < 0 {
+                            return Err(io::Error::new(
+                                ErrorKind::InvalidInput,
+                                "List length cannot be negative (i16).",
+                            ));
+                        }
+                        usize::try_from(v as i64).map_err(|_| {
+                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                        })?
+                    }
+                    ScalarType::UShort => usize::from(reader.read_u16::<B>()?),
+                    ScalarType::Int => {
+                        let v = reader.read_i32::<B>()?;
+                        if v < 0 {
+                            return Err(io::Error::new(
+                                ErrorKind::InvalidInput,
+                                "List length cannot be negative (i32).",
+                            ));
+                        }
+                        usize::try_from(v as i64).map_err(|_| {
+                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                        })?
+                    }
+                    ScalarType::UInt => usize::try_from(reader.read_u32::<B>()?).map_err(|_| {
+                        io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                    })?,
                     ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in ScalarType.")),
                     ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in ScalarType.")),
                 };
@@ -633,7 +724,7 @@ mod tests {
         let mut elem_def = ElementDef::new("dummy".to_string());
         elem_def.properties = prop;
 
-        let properties = p.read_ascii_element(&txt, &elem_def);
+        let properties = p.read_ascii_element(txt, &elem_def);
         assert!(properties.is_ok(), "{}", format!("error: {:?}", properties));
     }
     #[test]
