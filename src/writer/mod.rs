@@ -42,6 +42,12 @@ pub struct Writer<E: PropertyAccess> {
     phantom: PhantomData<E>,
 }
 
+impl<E: PropertyAccess> Default for Writer<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /*
 use std::marker::PhantomData;
 use writer::Writer;
@@ -177,9 +183,9 @@ impl<E: PropertyAccess> Writer<E> {
     /// Make sure the element definition is consistent with the payload.
     pub fn write_element_definition<T: Write>(&self, out: &mut T, element: &ElementDef) -> Result<usize> {
         let mut written = 0;
-        written += self.write_line_element_definition(out, &element)?;
+        written += self.write_line_element_definition(out, element)?;
         for (_, p) in &element.properties {
-            written += self.write_line_property_definition(out, &p)?;
+            written += self.write_line_property_definition(out, p)?;
         }
         Ok(written)
     }
@@ -206,7 +212,7 @@ impl<E: PropertyAccess> Writer<E> {
             written += self.write_line_obj_info(out, oi)?;
         }
         for (_, e) in &header.elements {
-            written += self.write_element_definition(out, &e)?;
+            written += self.write_element_definition(out, e)?;
         }
         written += self.write_line_end_header(out)?;
         Ok(written)
@@ -221,7 +227,7 @@ impl<E: PropertyAccess> Writer<E> {
     }
     fn write_property_type<T: Write>(&self, out: &mut T, data_type: &PropertyType) -> Result<usize> {
         match *data_type {
-            PropertyType::Scalar(ref scalar_type) => self.write_scalar_type(out, &scalar_type),
+            PropertyType::Scalar(ref scalar_type) => self.write_scalar_type(out, scalar_type),
             PropertyType::List(ref index_type, ref content_type) => {
                 let mut written = out.write("list ".as_bytes())?;
                 match *index_type {
@@ -229,9 +235,9 @@ impl<E: PropertyAccess> Writer<E> {
                     ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "List index can not be of type double.")),
                     _ => (),
                 };
-                written += self.write_scalar_type(out, &index_type)?;
+                written += self.write_scalar_type(out, index_type)?;
                 written += out.write(" ".as_bytes())?;
-                written += self.write_scalar_type(out, &content_type)?;
+                written += self.write_scalar_type(out, content_type)?;
                 Ok(written)
             }
         }
@@ -279,13 +285,13 @@ impl<E: PropertyAccess> Writer<E> {
         let mut written = 0;
         match header.encoding {
             Encoding::Ascii => for element in element_list {
-                written += self.write_ascii_element(out, element, &element_def)?;
+                written += self.write_ascii_element(out, element, element_def)?;
             },
             Encoding::BinaryBigEndian => for element in element_list {
-                written += self.write_big_endian_element(out, element, &element_def)?;
+                written += self.write_big_endian_element(out, element, element_def)?;
             },
             Encoding::BinaryLittleEndian => for element in element_list {
-                written += self.write_little_endian_element(out, element, &element_def)?;
+                written += self.write_little_endian_element(out, element, element_def)?;
             }
         }
         Ok(written)
@@ -310,14 +316,9 @@ impl<E: PropertyAccess> Writer<E> {
         let mut written = 0;
         let mut p_iter = element_def.properties.iter();
         let (_k, prop_type) = p_iter.next().unwrap();
-        written += self.write_ascii_property(out, element, &prop_type)?;
-        loop {
+        written += self.write_ascii_property(out, element, prop_type)?;
+        for (_name, prop_type) in p_iter {
             written += out.write(" ".as_bytes())?;
-            let n = p_iter.next();
-            if n == None {
-                break;
-            }
-            let (_name, prop_type) = n.unwrap();
             written += self.write_ascii_property(out, element, prop_type)?;
         }
         written += self.write_new_line(out)?;
@@ -325,7 +326,7 @@ impl<E: PropertyAccess> Writer<E> {
     }
     fn write_ascii_property<T: Write>(&self, out: &mut T, element: &E, prop_type: &PropertyDef) -> Result<usize> {
         let k = &prop_type.name;
-        let result = match prop_type.data_type {
+        match prop_type.data_type {
             PropertyType::Scalar(ref scalar_type) => match *scalar_type {
                 ScalarType::Char => self.write_ascii_scalar(out, get_prop!(element.get_char(k))),
                 ScalarType::UChar => self.write_ascii_scalar(out, get_prop!(element.get_uchar(k))),
@@ -346,15 +347,14 @@ impl<E: PropertyAccess> Writer<E> {
                 ScalarType::Float => self.write_ascii_list(get_prop!(element.get_list_float(k)), out),
                 ScalarType::Double => self.write_ascii_list(get_prop!(element.get_list_double(k)), out),
             }
-        };
-        result
+        }
     }
     fn write_ascii_scalar<T: Write, V: ToString>(&self, out: &mut T, value: V) -> Result<usize> {
         out.write(value.to_string().as_bytes())
     }
-    fn write_ascii_list<T: Write, D: Clone + Display>(&self, list: &[D], out: &mut T) -> Result<usize> {
+    fn write_ascii_list<T: Write, D: Display>(&self, list: &[D], out: &mut T) -> Result<usize> {
         let mut written = 0;
-        written += out.write(&list.len().to_string().as_bytes())?;
+        written += out.write(list.len().to_string().as_bytes())?;
         let b = " ".as_bytes();
         for v in list {
             written += out.write(b)?;
@@ -419,21 +419,21 @@ impl<E: PropertyAccess> Writer<E> {
                     };
 
                     written += match *scalar_type {
-                        ScalarType::Char => self.write_binary_list::<T, i8, B>(get_prop!(element.get_list_char(k)), out, &|o, x| {o.write_i8(*x)?; Ok(1)} )?,
-                        ScalarType::UChar => self.write_binary_list::<T, u8, B>(get_prop!(element.get_list_uchar(k)), out, &|o, x| {o.write_u8(*x)?; Ok(1)} )?,
-                        ScalarType::Short => self.write_binary_list::<T, i16, B>(get_prop!(element.get_list_short(k)), out, &|o, x| {o.write_i16::<B>(*x)?; Ok(2)} )?,
-                        ScalarType::UShort => self.write_binary_list::<T, u16, B>(get_prop!(element.get_list_ushort(k)), out, &|o, x| {o.write_u16::<B>(*x)?; Ok(2)} )?,
-                        ScalarType::Int => self.write_binary_list::<T, i32, B>(get_prop!(element.get_list_int(k)), out, &|o, x| {o.write_i32::<B>(*x)?; Ok(4)} )?,
-                        ScalarType::UInt => self.write_binary_list::<T, u32, B>(get_prop!(element.get_list_uint(k)), out, &|o, x| {o.write_u32::<B>(*x)?; Ok(4)} )?,
-                        ScalarType::Float => self.write_binary_list::<T, f32, B>(get_prop!(element.get_list_float(k)), out, &|o, x| {o.write_f32::<B>(*x)?; Ok(4)} )?,
-                        ScalarType::Double => self.write_binary_list::<T, f64, B>(get_prop!(element.get_list_double(k)), out, &|o, x| {o.write_f64::<B>(*x)?; Ok(8)} )?,
+                        ScalarType::Char => self.write_binary_list::<T, i8>(get_prop!(element.get_list_char(k)), out, &|o, x| {o.write_i8(*x)?; Ok(1)} )?,
+                        ScalarType::UChar => self.write_binary_list::<T, u8>(get_prop!(element.get_list_uchar(k)), out, &|o, x| {o.write_u8(*x)?; Ok(1)} )?,
+                        ScalarType::Short => self.write_binary_list::<T, i16>(get_prop!(element.get_list_short(k)), out, &|o, x| {o.write_i16::<B>(*x)?; Ok(2)} )?,
+                        ScalarType::UShort => self.write_binary_list::<T, u16>(get_prop!(element.get_list_ushort(k)), out, &|o, x| {o.write_u16::<B>(*x)?; Ok(2)} )?,
+                        ScalarType::Int => self.write_binary_list::<T, i32>(get_prop!(element.get_list_int(k)), out, &|o, x| {o.write_i32::<B>(*x)?; Ok(4)} )?,
+                        ScalarType::UInt => self.write_binary_list::<T, u32>(get_prop!(element.get_list_uint(k)), out, &|o, x| {o.write_u32::<B>(*x)?; Ok(4)} )?,
+                        ScalarType::Float => self.write_binary_list::<T, f32>(get_prop!(element.get_list_float(k)), out, &|o, x| {o.write_f32::<B>(*x)?; Ok(4)} )?,
+                        ScalarType::Double => self.write_binary_list::<T, f64>(get_prop!(element.get_list_double(k)), out, &|o, x| {o.write_f64::<B>(*x)?; Ok(8)} )?,
                     }
                 }
             }
         };
         Ok(written)
     }
-    fn write_binary_list<T: Write, D, B: ByteOrder>(&self, list: &[D], out: &mut T, out_val: &dyn Fn(&mut T, &D) -> Result<usize>) -> Result<usize> {
+    fn write_binary_list<T: Write, D>(&self, list: &[D], out: &mut T, out_val: &dyn Fn(&mut T, &D) -> Result<usize>) -> Result<usize> {
         let mut written = 0;
         for v in list {
             written += out_val(out, v)?;

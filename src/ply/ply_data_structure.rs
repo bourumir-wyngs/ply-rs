@@ -29,6 +29,12 @@ pub struct Ply<E: PropertyAccess> {
     /// ```
     pub payload: Payload<E>,
 }
+
+impl<E: PropertyAccess> Default for Ply<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl<E: PropertyAccess> Ply<E> {
     /// Creates a new `Ply<E>`.
     pub fn new() -> Self {
@@ -60,13 +66,19 @@ pub struct Header {
     pub comments: Vec<Comment>,
 }
 
+impl Default for Header {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Header {
     /// Constructs an empty `Header` using Ascii encoding and version 1.0.
     /// No object informations, elements or comments are set.
     pub fn new() -> Self {
         Header {
             encoding: Encoding::Ascii,
-            version: Version{major: 1, minor: 0},
+            version: Version { major: 1, minor: 0 },
             obj_infos: Vec::new(),
             elements: KeyMap::new(),
             comments: Vec::new(),
@@ -156,7 +168,7 @@ impl ElementDef {
     /// No properties are set.
     pub fn new(name: String) -> Self {
         ElementDef {
-            name: name,
+            name,
             count: 0,
             properties: KeyMap::new(),
         }
@@ -180,8 +192,8 @@ impl PropertyDef {
     /// Creates a new property definition.
     pub fn new(name: String, data_type: PropertyType) -> Self {
         PropertyDef {
-            name: name,
-            data_type: data_type,
+            name,
+            data_type,
         }
     }
 }

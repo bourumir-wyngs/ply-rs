@@ -37,14 +37,14 @@ impl error::Error for ConsistencyError {
 }
 
 fn has_white_space(s: &str) -> bool {
-    return s.contains(" ") || s.contains("\t");
+    s.contains(' ') || s.contains('\t')
 }
 
 fn has_line_break(s: &str) -> bool {
-    return s.contains("\n") || s.contains("\r");
+    s.contains('\n') || s.contains('\r')
 }
 
-impl<E: PropertyAccess> Ply<E>{
+impl<E: PropertyAccess> Ply<E> {
     /// Takes a mutable `Ply` object, performs common operations to make it consistent,
     ///
     /// When written, a consistent `Ply` object generates a valid PLY file.
@@ -61,7 +61,7 @@ impl<E: PropertyAccess> Ply<E>{
     /// For maximal compatability, only ascii characters should be used but this is not checked.
     /// Every relevant string is checked to not contain line breaks.
     /// Identifiers are also checked to not contain white spaces.
-    pub fn make_consistent(&mut self) -> Result<(), ConsistencyError>{
+    pub fn make_consistent(&mut self) -> Result<(), ConsistencyError> {
         for (ek, _) in &self.header.elements {
             if !self.payload.contains_key(ek) {
                 self.payload.insert(ek.clone(), Vec::new());
@@ -71,30 +71,32 @@ impl<E: PropertyAccess> Ply<E>{
             if pk.is_empty() {
                 return Err(ConsistencyError::new("Element cannot have empty name."));
             }
-            let ed = self.header.elements.get_mut(pk);
-            if ed.is_none() {
-                return Err(ConsistencyError::new(&format!("No decleration for element `{}` found.", pk)));
-            }
-            ed.unwrap().count = pe.len();
+            let Some(ed) = self.header.elements.get_mut(pk) else {
+                return Err(ConsistencyError::new(&format!(
+                    "No decleration for element `{}` found.",
+                    pk
+                )));
+            };
+            ed.count = pe.len();
         }
-        for ref oi in &self.header.obj_infos {
+        for oi in &self.header.obj_infos {
             if has_line_break(oi) {
                 return Err(ConsistencyError::new(&format!("Objection information `{}` should not contain any line breaks.", oi)));
             }
         }
-        for ref c in &self.header.comments {
-            if has_line_break(&c) {
+        for c in &self.header.comments {
+            if has_line_break(c) {
                return Err(ConsistencyError::new(&format!("Comment `{}` should not contain any line breaks.", c)));
             }
         }
-        for (_, ref e) in &self.header.elements {
+        for (_, e) in &self.header.elements {
             if has_line_break(&e.name) {
                 return Err(ConsistencyError::new(&format!("Name of element `{}` should not contain any line breaks.", e.name)));
             }
             if has_white_space(&e.name) {
                 return Err(ConsistencyError::new(&format!("Name of element `{}` should not contain any white spaces.", e.name)));
             }
-            for (_, ref p) in &e.properties {
+            for (_, p) in &e.properties {
                 if has_line_break(&p.name) {
                     return Err(ConsistencyError::new(&format!("Name of property `{}` of element `{}` should not contain any line breaks.", p.name, e.name)));
                 }
