@@ -68,7 +68,6 @@ fn read_all_atomic_types_ok() {
 mod struct_test_1 {
     use super::ply;
     use super::parser::Parser;
-    use std;
     use super::read_file;
     #[derive(Debug)]
     struct Vertex {
@@ -141,8 +140,8 @@ mod struct_test_1 {
         for (_ignore_key, element) in &header.elements {
             // we could also just parse them in sequence, but the file format might change
             match element.name.as_ref() {
-                "vertex" => {vertex_list = vertex_parser.read_payload_for_element(&mut f, &element, &header).unwrap();},
-                "face" => {face_list = face_parser.read_payload_for_element(&mut f, &element, &header).unwrap();},
+                "vertex" => {vertex_list = vertex_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
+                "face" => {face_list = face_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
                 _ => panic!("Enexpeced element!"),
             }
         }
@@ -151,32 +150,32 @@ mod struct_test_1 {
         println!("vertex list: {:#?}", vertex_list);
         println!("face list: {:#?}", face_list);
 
-        let ply = read_file(&path);
+        let ply = read_file(path);
 
-        for i in 0..vertex_list.len() {
+        for (i, vertex) in vertex_list.iter().enumerate() {
             let x = match ply.payload["vertex"][i]["x"] {
                 ply::Property::Float(v) => v,
                 _ => panic!("Unexpected property."),
             };
-            assert_eq!(vertex_list[i].x, x);
+            assert_eq!(vertex.x, x);
             let y = match ply.payload["vertex"][i]["y"] {
                 ply::Property::Float(v) => v,
                 _ => panic!("Unexpected property."),
             };
-            assert_eq!(vertex_list[i].y, y);
+            assert_eq!(vertex.y, y);
             let z = match ply.payload["vertex"][i]["z"] {
                 ply::Property::Float(v) => v,
                 _ => panic!("Unexpected property."),
             };
-            assert_eq!(vertex_list[i].z, z);
+            assert_eq!(vertex.z, z);
         }
 
-        for i in 0..face_list.len() {
+        for (i, face) in face_list.iter().enumerate() {
             let v = match ply.payload["face"][i]["vertex_index"] {
                 ply::Property::ListInt(ref v) => v,
                 _ => panic!("Unexpected property."),
             };
-            assert_eq!(face_list[i].vertex_index, *v);
+            assert_eq!(face.vertex_index, *v);
         }
     }
 }

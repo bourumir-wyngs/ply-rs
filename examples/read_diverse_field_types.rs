@@ -12,15 +12,15 @@ use std::io::BufReader;
 /// from various sources, the reader must adapt to the types used in the input.
 pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
     // Open the file
-    let file =
-        File::open(ply_file_path).expect(&format!("Could not open PLY file: {}", ply_file_path));
+    let file = File::open(ply_file_path)
+        .unwrap_or_else(|_| panic!("Could not open PLY file: {}", ply_file_path));
     let mut reader = BufReader::new(file);
 
     // Create a PLY parser and parse the header
     let parser = Parser::<DefaultElement>::new();
     let ply = parser
         .read_ply(&mut reader)
-        .expect(&format!("Could not parse PLY file: {}", ply_file_path));
+        .unwrap_or_else(|_| panic!("Could not parse PLY file: {}", ply_file_path));
 
     // Extract vertices and faces from the PLY file
     let mut vertices = Vec::new();
@@ -45,7 +45,7 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
                 _ => panic!("Unexpected type for vertex z"),
             };
 
-            vertices.push([x, y, z].into()); // Push vertex to the vertices list
+            vertices.push([x, y, z]); // Push vertex to the vertices list
         }
     }
 
@@ -58,7 +58,7 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
         if indices_list.len() < 3 {
             panic!("Insufficient indices for a triangle in face {}", i);
         }
-        const X: &'static str = "Failed to convert triangle index to u32";
+        const X: &str = "Failed to convert triangle index to u32";
         [
             indices_list[0].try_into().expect(X),
             indices_list[1].try_into().expect(X),
@@ -70,16 +70,16 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
         for (i, face) in faces_elem.iter().enumerate() {
             match face.get("vertex_indices") {
                 Some(Property::ListUInt(indices_list)) => {
-                    indices.push(extract_indices(indices_list, i).into());
+                    indices.push(extract_indices(indices_list, i));
                 }
                 Some(Property::ListInt(indices_list)) => {
-                    indices.push(extract_indices(indices_list, i).into());
+                    indices.push(extract_indices(indices_list, i));
                 }
                 Some(Property::ListUShort(indices_list)) => {
-                    indices.push(extract_indices(indices_list, i).into());
+                    indices.push(extract_indices(indices_list, i));
                 }
                 Some(Property::ListShort(indices_list)) => {
-                    indices.push(extract_indices(indices_list, i).into());
+                    indices.push(extract_indices(indices_list, i));
                 }
                 Some(property) => {
                     panic!("Unexpected property type for face {}: {:?}", i, property);

@@ -32,7 +32,7 @@ fn main() {
 
         // Add second point
         let mut point = DefaultElement::new();
-        point.insert("x".to_string(), Property::Float(6.28));
+        point.insert("x".to_string(), Property::Float(6.2899));
         point.insert("y".to_string(), Property::Float(-1.42));
         points.push(point);
 
