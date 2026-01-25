@@ -406,7 +406,17 @@ impl<E: PropertyAccess> Writer<E> {
                     };
                 },
                 PropertyType::List(ref index_type, ref scalar_type) => {
-                    let vec_len = element_def.count;
+                    // Get the actual list length from the element's property data
+                    let vec_len = match *scalar_type {
+                        ScalarType::Char => get_prop!(element.get_list_char(k)).len(),
+                        ScalarType::UChar => get_prop!(element.get_list_uchar(k)).len(),
+                        ScalarType::Short => get_prop!(element.get_list_short(k)).len(),
+                        ScalarType::UShort => get_prop!(element.get_list_ushort(k)).len(),
+                        ScalarType::Int => get_prop!(element.get_list_int(k)).len(),
+                        ScalarType::UInt => get_prop!(element.get_list_uint(k)).len(),
+                        ScalarType::Float => get_prop!(element.get_list_float(k)).len(),
+                        ScalarType::Double => get_prop!(element.get_list_double(k)).len(),
+                    };
                     written += match *index_type {
                         ScalarType::Char => {out.write_i8(vec_len as i8)?; 1},
                         ScalarType::UChar => {out.write_u8(vec_len as u8)?; 1},
