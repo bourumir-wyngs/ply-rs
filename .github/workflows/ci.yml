@@ -10,6 +10,9 @@ on:
     # Nightly-ish (03:17 UTC) to catch newly disclosed RustSec advisories and fuzz regressions.
     - cron: "17 3 * * *"
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 

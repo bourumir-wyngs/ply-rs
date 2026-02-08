@@ -5,6 +5,9 @@ on:
     - cron: '50 3 4,24 * *'  # Run twice a month.
   workflow_dispatch:     # Allows manual triggering
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
