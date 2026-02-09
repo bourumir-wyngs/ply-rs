@@ -30,8 +30,8 @@ peg::parser!{pub grammar grammar() for str {
 
 /// Grammar for PLY header
 
-pub rule number() -> String
-	= n:$(['0'..='9']+) { n.to_string() }
+pub rule number() -> &'input str
+	= n:$(['0'..='9']+) { n }
 
 rule space() = [' '|'\t']+
 
@@ -40,11 +40,11 @@ rule uint() -> Option<u64>
         n.parse::<u64>().ok()
     }
 
-rule ident() -> String
-	= s:$(['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'0'..='9'|'_'|'-']*) { s.to_string() }
+rule ident() -> &'input str
+	= s:$(['a'..='z'|'A'..='Z'|'_']['a'..='z'|'A'..='Z'|'0'..='9'|'_'|'-']*) { s }
 
-rule text() -> String
-	= s:$((!['\n'|'\r'][_])+) { s.to_string() }
+rule text() -> &'input str
+	= s:$((!['\n'|'\r'][_])+) { s }
 
 rule line_break()
 	= "\r\n" / ['\n'|'\r']
@@ -109,14 +109,14 @@ pub rule obj_info() -> ObjInfo
 
 pub rule element() -> Option<ElementDef>
     = "element" space() id:ident() space() n:uint() {{
-        let mut e = ElementDef::new(id);
+        let mut e = ElementDef::new(id.to_owned());
         e.count = usize::try_from(n?).ok()?;
         Some(e)
     }}
 
 pub rule property() -> PropertyDef
 	= "property" space() data_type:data_type() space() id:ident() {
-		PropertyDef::new(id, data_type)
+		PropertyDef::new(id.to_owned(), data_type)
 	}
 
 pub rule end_header()

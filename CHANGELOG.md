@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.0.1] - 2026-02-09
+
+### Changed
+- Reduced temporary allocations in the PEG header grammar by returning borrowed `&str` slices from internal rules (`number`, `ident`, `text`) and allocating only at call sites where an owned `String` is required.
+
 ## [3.0.0] - 2026-01-25
 
 ### Breaking changes
