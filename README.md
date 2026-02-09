@@ -13,23 +13,7 @@ This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) projec
 
 The crate has been renamed to `ply-rs-bw,` and minor issues were resolved to ensure compatibility with Rust 2024
 edition. Additionally, an example has been added to demonstrate how to read PLY files with diverse field types
-(e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). Semantic versioning is now adopted for consistent version management.
-
-Version 2.0.0 eliminates unnecessary cloning, as suggested by Nguyen Thuan Hung (see [pull request 'Optimise by not cloning key'](https://github.com/Fluci/ply-rs/pull/21/files)). While the scope of this change is limited, it modifies the signature of the public API trait `PropertyAccess`. The method:
-
-`fn set_property(&mut self, _property_name: String, _property: Property)`
-
-into
-
-`fn set_property(&mut self, _property_name: &String, _property: Property)`
-
-This breaking change necessitates incrementing the major version number. According to the author, this optimization reduces the time required to read 80,000 points from 450ms to 90ms, which is a significant improvement. The pull request has been reviewed and approved by our team.
-
-Version 2.1.0 further improves the `PropertyAccess` trait by changing all `&String` parameters to `&str`:
-
-`fn set_property(&mut self, _property_name: &str, _property: Property)`
-
-This change is **backwards compatible** — existing code using `&String` will continue to work without modification, as Rust's `Deref` trait automatically coerces `&String` to `&str`. This is the idiomatic Rust approach (recommended by Clippy's `ptr_arg` lint) and provides more flexibility, allowing callers to pass string literals directly without creating a `String`.
+(e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). Semantic versioning is now adopted for consistent version management. The API compatibility badge checks for breaking changes relative to the current major version (N.*.*). 
 
 ***
 
