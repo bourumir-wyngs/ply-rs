@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Reduced temporary allocations in the PEG header grammar by returning borrowed `&str` slices from internal rules (`number`, `ident`, `text`) and allocating only at call sites where an owned `String` is required.
+- Removed unnecessary `new_line` String allocation in `Writer` struct, reducing heap allocations for every `Writer` instance.
+- Reduced per-value heap allocations when writing ASCII payloads by formatting values directly to the output (keeps existing byte-counting API).
+- Enabled previously disabled linting and fixed many lints.
+
+### Added
+- Comprehensive test coverage for ASCII writer supporting all scalar and list types.
 
 ## [3.0.0] - 2026-01-25
 

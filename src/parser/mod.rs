@@ -90,6 +90,7 @@ use std::marker::PhantomData;
 /// println!("Ply: {:#?}", ply);
 /// ```
 ///
+#[derive(Debug)]
 pub struct Parser<E: PropertyAccess> {
       phantom: PhantomData<E>,
 }
@@ -349,7 +350,6 @@ use std::str::FromStr;
 
 use crate::ply::{ Property, PropertyType, ScalarType };
 use std::error;
-use std::marker;
 
 /// # Ascii
 impl<E: PropertyAccess> Parser<E> {
@@ -448,7 +448,7 @@ impl<E: PropertyAccess> Parser<E> {
         }
     }
     fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize) -> Result<Vec<D>>
-        where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
+        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
         let mut out: Vec<D> = Vec::with_capacity(count);
         for i in 0..count {
             let s = match elem_iter.next() {
@@ -625,7 +625,7 @@ impl<E: PropertyAccess> Parser<E> {
         Ok(result)
     }
     fn __read_binary_list<T: Read, D: FromStr>(&self, reader: &mut T, read_from: &dyn Fn(&mut T) -> Result<D>, count: usize) -> Result<Vec<D>>
-        where <D as FromStr>::Err: error::Error + marker::Send + marker::Sync + 'static {
+        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
         let mut list = Vec::<D>::with_capacity(count);
         for i in 0..count {
             let value : D = match read_from(reader) {

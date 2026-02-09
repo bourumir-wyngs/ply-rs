@@ -36,9 +36,8 @@ use crate::ply::PropertyAccess;
 /// // Write your data:
 /// let written = w.write_ply(&mut buf, &mut ply).unwrap();
 /// ```
+#[derive(Debug)]
 pub struct Writer<E: PropertyAccess> {
-    /// Should be fairly efficient, see `as_bytes()` in https://doc.rust-lang.org/src/collections/string.rs.html#1001
-    new_line: String,
     phantom: PhantomData<E>,
 }
 
@@ -66,7 +65,6 @@ impl<E: PropertyAccess> Writer<E> {
     /// Create a new `Writer<E>` where `E` is the element type. To get started quickly use `DefaultElement`.
     pub fn new() -> Self {
         Writer {
-            new_line: "\n".to_string(),
             phantom: PhantomData,
         }
     }
@@ -97,7 +95,7 @@ impl<E: PropertyAccess> Writer<E> {
         Ok(written)
     }
     fn write_new_line<T: Write>(&self, out: &mut T) -> Result<usize> {
-        out.write(self.new_line.as_bytes())
+        out.write(b"\n")
     }
 }
 
@@ -304,6 +302,29 @@ use super::Writer;
 // */
 use std::fmt::Display;
 
+struct CountingWrite<'a, W: Write> {
+    inner: &'a mut W,
+    bytes: usize,
+}
+
+impl<'a, W: Write> CountingWrite<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self { inner, bytes: 0 }
+    }
+}
+
+impl<W: Write> Write for CountingWrite<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.bytes += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
 macro_rules! get_prop(
     ($e:expr) => (match $e {None => return Err(io::Error::new(ErrorKind::InvalidInput, "No property available for given key.")), Some(x) => x})
 );
@@ -349,18 +370,18 @@ impl<E: PropertyAccess> Writer<E> {
             }
         }
     }
-    fn write_ascii_scalar<T: Write, V: ToString>(&self, out: &mut T, value: V) -> Result<usize> {
-        out.write(value.to_string().as_bytes())
+    fn write_ascii_scalar<T: Write, V: Display>(&self, out: &mut T, value: V) -> Result<usize> {
+        let mut cw = CountingWrite::new(out);
+        write!(&mut cw, "{}", value)?;
+        Ok(cw.bytes)
     }
     fn write_ascii_list<T: Write, D: Display>(&self, list: &[D], out: &mut T) -> Result<usize> {
-        let mut written = 0;
-        written += out.write(list.len().to_string().as_bytes())?;
-        let b = " ".as_bytes();
+        let mut cw = CountingWrite::new(out);
+        write!(&mut cw, "{}", list.len())?;
         for v in list {
-            written += out.write(b)?;
-            written += out.write(v.to_string().as_bytes())?;
+            write!(&mut cw, " {}", v)?;
         }
-        Ok(written)
+        Ok(cw.bytes)
     }
 }
 /*

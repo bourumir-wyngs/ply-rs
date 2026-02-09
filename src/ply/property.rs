@@ -9,7 +9,7 @@
 /// Scalar type used to encode properties in the payload.
 ///
 /// For the translation to rust types, see individual documentation.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ScalarType {
     /// Signed 8 bit integer, rust: `i8`.
     Char,
@@ -33,7 +33,7 @@ pub enum ScalarType {
 ///
 /// There are two possible types: scalars and lists.
 /// Lists are a sequence of scalars with a leading integer value defining how many elements the list contains.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PropertyType {
     /// Simple, "one-number" type.
     Scalar(ScalarType),
