@@ -99,6 +99,12 @@ impl<E: PropertyAccess> Writer<E> {
     }
 }
 
+/// Helper trait to simplify writing structure to PLY file.
+pub trait ToPly {
+    /// Writes the structure to a PLY file.
+    fn write_ply<W: Write>(&self, writer: &mut W) -> Result<usize>;
+}
+
 /*
 use writer::Writer;
 use std::io;

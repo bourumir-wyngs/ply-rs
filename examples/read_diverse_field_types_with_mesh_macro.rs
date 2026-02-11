@@ -21,7 +21,7 @@ struct Mesh {
     faces: Vec<Face>,
 }
 
-pub fn read_mesh(ply_file_path: &str) -> Mesh {
+fn read_mesh(ply_file_path: &str) -> Mesh {
     let mut file = File::open(ply_file_path)
         .unwrap_or_else(|_| panic!("Could not open PLY file: {}", ply_file_path));
 

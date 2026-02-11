@@ -208,6 +208,12 @@ pub trait PropertySchema {
     fn schema() -> Vec<(String, Requiredness)>;
 }
 
+/// Trait that describes the schema of a property including its type.
+pub trait PropertyTypeSchema {
+    /// Returns a list of properties (name and type) expected by this type.
+    fn property_type_schema() -> Vec<(String, PropertyType)>;
+}
+
 /// Allows a type to be automatically parsed from a PLY element.
-pub trait PlyAccess: PropertyAccess + PropertySchema {}
-impl<T: PropertyAccess + PropertySchema> PlyAccess for T {}
+pub trait PlyAccess: PropertyAccess + PropertySchema + PropertyTypeSchema {}
+impl<T: PropertyAccess + PropertySchema + PropertyTypeSchema> PlyAccess for T {}

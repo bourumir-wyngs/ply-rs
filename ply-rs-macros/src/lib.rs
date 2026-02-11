@@ -219,6 +219,27 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
 
     let mut set_arms = Vec::new();
     let mut schema_entries = Vec::new();
+    let mut type_schema_entries = Vec::new();
+
+    // Getters
+    let mut get_char_arms = Vec::new();
+    let mut get_uchar_arms = Vec::new();
+    let mut get_short_arms = Vec::new();
+    let mut get_ushort_arms = Vec::new();
+    let mut get_int_arms = Vec::new();
+    let mut get_uint_arms = Vec::new();
+    let mut get_float_arms = Vec::new();
+    let mut get_double_arms = Vec::new();
+
+    // List getters
+    let mut get_list_char_arms = Vec::new();
+    let mut get_list_uchar_arms = Vec::new();
+    let mut get_list_short_arms = Vec::new();
+    let mut get_list_ushort_arms = Vec::new();
+    let mut get_list_int_arms = Vec::new();
+    let mut get_list_uint_arms = Vec::new();
+    let mut get_list_float_arms = Vec::new();
+    let mut get_list_double_arms = Vec::new();
 
     for field in fields {
         let field_name = &field.ident;
@@ -241,11 +262,8 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
 
         let is_opt = is_option(field_type);
-        let conversion = if let Some(inner_type) = is_opt.as_ref() {
-            generate_conversion(inner_type)
-        } else {
-            generate_conversion(field_type)
-        };
+        let conversion_type = if let Some(inner) = is_opt.as_ref() { inner } else { field_type };
+        let conversion = generate_conversion(conversion_type);
 
         let arm = if is_opt.is_some() {
             quote! {
@@ -274,6 +292,56 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
         schema_entries.push(quote! {
             (#ply_name_lit.to_string(), #requiredness)
         });
+
+        let prop_type_token = get_property_type_tokens(conversion_type);
+        type_schema_entries.push(quote! {
+             (#ply_name_lit.to_string(), #prop_type_token)
+        });
+
+        // Getter logic
+        let field_access_scalar = if is_opt.is_some() {
+             quote! { self.#field_name }
+        } else {
+             quote! { Some(self.#field_name) }
+        };
+        
+        let field_access_list = if is_opt.is_some() {
+             quote! { self.#field_name.as_deref() }
+        } else {
+             quote! { Some(self.#field_name.as_slice()) }
+        };
+
+        if let Some(inner) = is_vec(conversion_type) {
+             // List type
+             if let Some(kind) = scalar_ident(inner) {
+                 use ScalarKind::*;
+                 let arm = quote! { key if key == #ply_name_lit => #field_access_list, };
+                 match kind {
+                    I8 => get_list_char_arms.push(arm),
+                    U8 => get_list_uchar_arms.push(arm),
+                    I16 => get_list_short_arms.push(arm),
+                    U16 => get_list_ushort_arms.push(arm),
+                    I32 => get_list_int_arms.push(arm),
+                    U32 => get_list_uint_arms.push(arm),
+                    F32 => get_list_float_arms.push(arm),
+                    F64 => get_list_double_arms.push(arm),
+                 }
+             }
+        } else if let Some(kind) = scalar_ident(conversion_type) {
+             // Scalar type
+             use ScalarKind::*;
+             let arm = quote! { key if key == #ply_name_lit => #field_access_scalar, };
+             match kind {
+                I8 => get_char_arms.push(arm),
+                U8 => get_uchar_arms.push(arm),
+                I16 => get_short_arms.push(arm),
+                U16 => get_ushort_arms.push(arm),
+                I32 => get_int_arms.push(arm),
+                U32 => get_uint_arms.push(arm),
+                F32 => get_float_arms.push(arm),
+                F64 => get_double_arms.push(arm),
+             }
+        }
     }
 
     let expanded = quote! {
@@ -285,10 +353,32 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
                     _ => {},
                 }
             }
+            fn get_char(&self, key: &str) -> Option<i8> { match key { #( #get_char_arms )* _ => None } }
+            fn get_uchar(&self, key: &str) -> Option<u8> { match key { #( #get_uchar_arms )* _ => None } }
+            fn get_short(&self, key: &str) -> Option<i16> { match key { #( #get_short_arms )* _ => None } }
+            fn get_ushort(&self, key: &str) -> Option<u16> { match key { #( #get_ushort_arms )* _ => None } }
+            fn get_int(&self, key: &str) -> Option<i32> { match key { #( #get_int_arms )* _ => None } }
+            fn get_uint(&self, key: &str) -> Option<u32> { match key { #( #get_uint_arms )* _ => None } }
+            fn get_float(&self, key: &str) -> Option<f32> { match key { #( #get_float_arms )* _ => None } }
+            fn get_double(&self, key: &str) -> Option<f64> { match key { #( #get_double_arms )* _ => None } }
+            
+            fn get_list_char(&self, key: &str) -> Option<&[i8]> { match key { #( #get_list_char_arms )* _ => None } }
+            fn get_list_uchar(&self, key: &str) -> Option<&[u8]> { match key { #( #get_list_uchar_arms )* _ => None } }
+            fn get_list_short(&self, key: &str) -> Option<&[i16]> { match key { #( #get_list_short_arms )* _ => None } }
+            fn get_list_ushort(&self, key: &str) -> Option<&[u16]> { match key { #( #get_list_ushort_arms )* _ => None } }
+            fn get_list_int(&self, key: &str) -> Option<&[i32]> { match key { #( #get_list_int_arms )* _ => None } }
+            fn get_list_uint(&self, key: &str) -> Option<&[u32]> { match key { #( #get_list_uint_arms )* _ => None } }
+            fn get_list_float(&self, key: &str) -> Option<&[f32]> { match key { #( #get_list_float_arms )* _ => None } }
+            fn get_list_double(&self, key: &str) -> Option<&[f64]> { match key { #( #get_list_double_arms )* _ => None } }
         }
         impl ply_rs_bw::ply::PropertySchema for #name {
             fn schema() -> Vec<(String, ply_rs_bw::ply::Requiredness)> {
                 vec![ #( #schema_entries ),* ]
+            }
+        }
+        impl ply_rs_bw::ply::PropertyTypeSchema for #name {
+            fn property_type_schema() -> Vec<(String, ply_rs_bw::ply::PropertyType)> {
+                vec![ #( #type_schema_entries ),* ]
             }
         }
     };
@@ -516,4 +606,124 @@ fn list_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStrea
         quote!{ ply_rs_bw::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
     ];
     (arms, cast_ty)
+}
+
+/// Procedural macro to derive the `ToPly` trait.
+///
+/// This macro allows a struct to be written directly to a PLY file by mapping
+/// `Vec<T>` fields to PLY elements.
+#[proc_macro_derive(ToPly, attributes(ply))]
+pub fn derive_to_ply(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    let fields = match input.data {
+        Data::Struct(ref data) => match data.fields {
+            Fields::Named(ref fields) => &fields.named,
+            _ => panic!("ToPly only supports named fields"),
+        },
+        _ => panic!("ToPly only supports structs"),
+    };
+
+    let mut element_defs = Vec::new();
+    let mut payload_writes = Vec::new();
+
+    for field in fields {
+        let field_name = &field.ident;
+        let field_type = &field.ty;
+        let mut ply_name = field_name.as_ref().unwrap().to_string();
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("ply") {
+                let _ = attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("name") {
+                        if let Ok(value) = meta.value() {
+                            if let Ok(s) = value.parse::<syn::LitStr>() {
+                                ply_name = s.value();
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+        
+        let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
+        let inner_ty = is_vec(field_type).expect("ToPly fields must be Vec<T>");
+
+        element_defs.push(quote! {
+            {
+                let mut element = ply_rs_bw::ply::ElementDef::new(#ply_name_lit.to_string());
+                element.count = self.#field_name.len();
+                let props = <#inner_ty as ply_rs_bw::ply::PropertyTypeSchema>::property_type_schema();
+                for (name, ty) in props {
+                    ply_rs_bw::ply::Addable::add(&mut element.properties, ply_rs_bw::ply::PropertyDef::new(name, ty));
+                }
+                ply_rs_bw::ply::Addable::add(&mut header.elements, element);
+            }
+        });
+
+        payload_writes.push(quote! {
+            {
+                let element_def = header.elements.get(#ply_name_lit).expect("Element definition missing");
+                let w = ply_rs_bw::writer::Writer::<#inner_ty>::new();
+                w.write_payload_of_element(writer, &self.#field_name, element_def, &header)?;
+            }
+        });
+    }
+
+    let expanded = quote! {
+        impl ply_rs_bw::writer::ToPly for #name {
+            fn write_ply<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<usize> {
+                let mut header = ply_rs_bw::ply::Header::new();
+                header.encoding = ply_rs_bw::ply::Encoding::Ascii; // Defaulting to Ascii
+                
+                #( #element_defs )*
+                
+                let w = ply_rs_bw::writer::Writer::<ply_rs_bw::ply::DefaultElement>::new();
+                let mut written = w.write_header(writer, &header)?;
+                
+                #( #payload_writes )*
+                
+                Ok(written)
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+fn get_property_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
+    if let Some(inner) = is_vec(ty) {
+         if let Some(kind) = scalar_ident(inner) {
+             let (scalar_type_token, _) = scalar_type_tokens(&kind);
+             return quote! {
+                 ply_rs_bw::ply::PropertyType::List(ply_rs_bw::ply::ScalarType::UChar, #scalar_type_token)
+             };
+         }
+    }
+    if let Some(kind) = scalar_ident(ty) {
+         let (scalar_type_token, _) = scalar_type_tokens(&kind);
+         return quote! {
+             ply_rs_bw::ply::PropertyType::Scalar(#scalar_type_token)
+         };
+    }
+    if let Some(inner) = is_option(ty) {
+        return get_property_type_tokens(inner);
+    }
+    quote! { ply_rs_bw::ply::PropertyType::Scalar(ply_rs_bw::ply::ScalarType::Int) }
+}
+
+fn scalar_type_tokens(kind: &ScalarKind) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    use ScalarKind::*;
+    match kind {
+        I8 => (quote!{ ply_rs_bw::ply::ScalarType::Char }, quote!{ i8 }),
+        U8 => (quote!{ ply_rs_bw::ply::ScalarType::UChar }, quote!{ u8 }),
+        I16 => (quote!{ ply_rs_bw::ply::ScalarType::Short }, quote!{ i16 }),
+        U16 => (quote!{ ply_rs_bw::ply::ScalarType::UShort }, quote!{ u16 }),
+        I32 => (quote!{ ply_rs_bw::ply::ScalarType::Int }, quote!{ i32 }),
+        U32 => (quote!{ ply_rs_bw::ply::ScalarType::UInt }, quote!{ u32 }),
+        F32 => (quote!{ ply_rs_bw::ply::ScalarType::Float }, quote!{ f32 }),
+        F64 => (quote!{ ply_rs_bw::ply::ScalarType::Double }, quote!{ f64 }),
+    }
 }

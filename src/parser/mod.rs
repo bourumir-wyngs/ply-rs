@@ -348,11 +348,11 @@ impl<E: PropertyAccess> Parser<E> {
 /// Helper trait for high-level parsing of multiple elements.
 pub trait FromPly {
     /// Reads the entire PLY file from the reader.
-    fn read_ply<T: Read>(reader: &mut T) -> io::Result<Self> where Self: Sized;
+    fn read_ply<T: Read>(reader: &mut T) -> Result<Self> where Self: Sized;
 }
 
 impl<E: PlyAccess> FromPly for Ply<E> {
-    fn read_ply<T: Read>(reader: &mut T) -> io::Result<Self> {
+    fn read_ply<T: Read>(reader: &mut T) -> Result<Self> {
         let parser = Parser::<E>::new();
         parser.read_ply(reader)
     }
