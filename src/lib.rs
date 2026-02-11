@@ -29,6 +29,10 @@
 pub mod parser;
 pub mod ply;
 pub mod writer;
+ 
+pub use ply_rs_macros::{PlyAccess, FromPly};
+pub use ply::PlyAccess;
+pub use parser::FromPly;
 
 mod util;
 

@@ -189,3 +189,25 @@ pub trait PropertyAccess {
         None
     }
 }
+
+/// Defines whether a property is required or optional.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Requiredness {
+    /// The property must be present in the header.
+    Required,
+    /// The property may be missing from the header.
+    Optional,
+}
+
+/// Provides a schema for the properties expected by a data structure.
+///
+/// This is used by the parser to validate that all required properties are present
+/// in the PLY header before attempting to read the payload.
+pub trait PropertySchema {
+    /// Returns a list of properties (name and requiredness) expected by this type.
+    fn schema() -> Vec<(String, Requiredness)>;
+}
+
+/// Allows a type to be automatically parsed from a PLY element.
+pub trait PlyAccess: PropertyAccess + PropertySchema {}
+impl<T: PropertyAccess + PropertySchema> PlyAccess for T {}

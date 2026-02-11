@@ -143,7 +143,7 @@ impl<E: PropertyAccess> Parser<E> {
 }
 
 // use ply::{ Header, Encoding };
-use crate::ply::{ PropertyAccess, Version, ObjInfo, Comment, ElementDef, KeyMap, Addable };
+use crate::ply::{ PropertyAccess, Version, ObjInfo, Comment, ElementDef, KeyMap, Addable, PlyAccess };
 /*
 use util::LocationTracker;
 use super::Parser;
@@ -342,6 +342,19 @@ impl<E: PropertyAccess> Parser<E> {
         }
 
         Ok(payload)
+    }
+}
+
+/// Helper trait for high-level parsing of multiple elements.
+pub trait FromPly {
+    /// Reads the entire PLY file from the reader.
+    fn read_ply<T: Read>(reader: &mut T) -> io::Result<Self> where Self: Sized;
+}
+
+impl<E: PlyAccess> FromPly for Ply<E> {
+    fn read_ply<T: Read>(reader: &mut T) -> io::Result<Self> {
+        let parser = Parser::<E>::new();
+        parser.read_ply(reader)
     }
 }
 

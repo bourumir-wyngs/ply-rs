@@ -19,6 +19,7 @@ edition = "2024"
 indexmap = "^2"
 byteorder = "^1.5"
 peg = "^0.8.5"
+ply-rs-macros = { path = "ply-rs-macros" }
 
 [dev-dependencies]
 doc-comment = "^0.3"
@@ -37,6 +38,9 @@ name = "read_ply_to_structs"
 
 [[example]]
 name = "read_diverse_field_types"
+
+[[example]]
+name = "read_diverse_field_types_with_mesh_macro"
 
 [[example]]
 name = "write_empty_ply"
