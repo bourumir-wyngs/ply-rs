@@ -2,11 +2,8 @@ use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 
 #[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct Vertex {
-    #[ply(name = "x")]
     x: f32,
-    #[ply(name = "y")]
     y: f32,
-    #[ply(name = "z")]
     z: f32,
 }
 
