@@ -3,14 +3,17 @@ use std::fs::File;
 
 #[derive(Debug, Default, PlyAccess)]
 struct Vertex {
-    #[ply(name = "x")] x: f32,
-    #[ply(name = "y")] y: f32,
-    #[ply(name = "z")] z: f32,
+    // we use maximal abstraction (ply types and names are inferred).
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
 #[derive(Debug, Default, PlyAccess)]
 struct Face {
-    #[ply(name = "vertex_indices")] indices: Vec<u32>,
+    // we use maximum details
+    #[ply(name = "vertex_indices", type = "uint", count = "uchar")]
+    indices: Vec<u32>,
 }
 
 #[derive(Debug, FromPly)]

@@ -48,6 +48,67 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, Type, PathArguments, GenericArgument};
+use proc_macro_crate::{crate_name, FoundCrate};
+
+fn get_crate_name() -> proc_macro2::TokenStream {
+    let found_crate = crate_name("ply-rs-bw");
+
+    match found_crate {
+        Ok(FoundCrate::Itself) => quote!(::ply_rs_bw),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#ident)
+        }
+        Err(_) => quote!(::ply_rs_bw),
+    }
+}
+
+struct PlyAttr {
+    name: String,
+    count_type: Option<String>,
+    explicit_type: Option<String>,
+}
+
+/// Parses the `#[ply(...)]` attributes and returns the PLY property name and optional count type.
+fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
+    let mut attr_data = PlyAttr {
+        name: field.ident.as_ref().unwrap().to_string(),
+        count_type: None,
+        explicit_type: None,
+    };
+
+    for attr in &field.attrs {
+        if attr.path().is_ident("ply") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    attr_data.name = s.value();
+                    Ok(())
+                } else if meta.path.is_ident("count") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    attr_data.count_type = Some(s.value());
+                    Ok(())
+                } else if meta.path.is_ident("type") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    attr_data.explicit_type = Some(s.value());
+                    Ok(())
+                } else {
+                    Err(meta.error(format!("unknown ply attribute: {}", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default())))
+                }
+            })?;
+        }
+    }
+
+    Ok(attr_data)
+}
+
+/// Parses the `#[ply(name = "...")]` attribute and returns the PLY property name.
+fn parse_ply_name(field: &syn::Field) -> Result<String, syn::Error> {
+    Ok(parse_ply_attr(field)?.name)
+}
 
 /// Procedural macro to derive the `PropertyAccess` trait.
 ///
@@ -56,37 +117,35 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Type, PathArguments, Gen
 ///
 /// Supported attributes:
 /// - `#[ply(name = "property_name")]`: Maps the field to a specific PLY property name.
+///
+/// Note: Optional fields (`Option<T>`) are only supported when reading PLY files.
+/// When writing, all properties must have a value, so `Option<T>` is not allowed.
 #[proc_macro_derive(PropertyAccess, attributes(ply))]
 pub fn derive_property_access(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
+    let name = &input.ident;
 
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => panic!("PropertyAccess only supports named fields"),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PropertyAccess only supports named fields").to_compile_error()),
         },
-        _ => panic!("PropertyAccess only supports structs"),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PropertyAccess only supports structs").to_compile_error()),
     };
 
     let mut set_arms = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
 
     for field in fields {
         let field_name = &field.ident;
         let field_type = &field.ty;
-        let mut ply_name = field_name.as_ref().unwrap().to_string();
+        let ply_name = match parse_ply_name(field) {
+            Ok(name) => name,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
-        for attr in &field.attrs {
-            if attr.path().is_ident("ply") {
-                let _ = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        let value = meta.value()?;
-                        let s: syn::LitStr = value.parse()?;
-                        ply_name = s.value();
-                    }
-                    Ok(())
-                });
-            }
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
         }
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
@@ -99,11 +158,20 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
              generate_conversion(field_type)
         };
 
+        let conversion = match conversion {
+            Ok(tokens) => tokens,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
+
         let arm = if is_opt.is_some() {
             quote! {
                 #ply_name_lit => {
                     if let Some(val) = #conversion {
-                        self.#field_name = Some(val);
+                        let mut _val = val;
+                        unsafe {
+                            self.#field_name = Some(std::ptr::read(&mut _val as *mut _ as *const _));
+                            std::mem::forget(_val);
+                        }
                     }
                 }
             }
@@ -111,7 +179,11 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
             quote! {
                 #ply_name_lit => {
                     if let Some(val) = #conversion {
-                        self.#field_name = val;
+                        let mut _val = val;
+                        unsafe {
+                            self.#field_name = std::ptr::read(&mut _val as *mut _ as *const _);
+                            std::mem::forget(_val);
+                        }
                     }
                 }
             }
@@ -120,13 +192,15 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
 
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ply_rs = get_crate_name();
     let expanded = quote! {
-        impl ply_rs_bw::ply::PropertyAccess for #name where #name: Default {
+        impl #impl_generics #ply_rs::ply::PropertyAccess for #name #ty_generics #where_clause {
             fn new() -> Self {
                 Default::default()
             }
 
-            fn set_property(&mut self, key: &str, property: ply_rs_bw::ply::Property) {
+            fn set_property(&mut self, key: &str, property: #ply_rs::ply::Property) {
                 match key {
                     #( #set_arms )*
                     _ => {},
@@ -145,39 +219,34 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(PropertySchema, attributes(ply))]
 pub fn derive_property_schema(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
+    let name = &input.ident;
 
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => panic!("PropertySchema only supports named fields"),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PropertySchema only supports named fields").to_compile_error()),
         },
-        _ => panic!("PropertySchema only supports structs"),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PropertySchema only supports structs").to_compile_error()),
     };
 
     let mut schema_entries = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
 
     for field in fields {
-        let field_name = &field.ident;
-        let mut ply_name = field_name.as_ref().unwrap().to_string();
+        let ply_name = match parse_ply_name(field) {
+            Ok(name) => name,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
-        for attr in &field.attrs {
-            if attr.path().is_ident("ply") {
-                let _ = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        let value = meta.value()?;
-                        let s: syn::LitStr = value.parse()?;
-                        ply_name = s.value();
-                    }
-                    Ok(())
-                });
-            }
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
         }
 
+        let ply_rs = get_crate_name();
         let requiredness = if is_option(&field.ty).is_some() {
-            quote! { ply_rs_bw::ply::Requiredness::Optional }
+            quote! { #ply_rs::ply::Requiredness::Optional }
         } else {
-            quote! { ply_rs_bw::ply::Requiredness::Required }
+            quote! { #ply_rs::ply::Requiredness::Required }
         };
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
@@ -186,9 +255,11 @@ pub fn derive_property_schema(input: TokenStream) -> TokenStream {
         });
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ply_rs = get_crate_name();
     let expanded = quote! {
-        impl ply_rs_bw::ply::PropertySchema for #name {
-            fn schema() -> Vec<(String, ply_rs_bw::ply::Requiredness)> {
+        impl #impl_generics #ply_rs::ply::PropertySchema for #name #ty_generics #where_clause {
+            fn schema() -> Vec<(String, #ply_rs::ply::Requiredness)> {
                 vec![
                     #( #schema_entries ),*
                 ]
@@ -203,23 +274,27 @@ pub fn derive_property_schema(input: TokenStream) -> TokenStream {
 ///
 /// This is a convenience macro that derives both `PropertyAccess` and `PropertySchema`.
 /// It is the primary macro for defining PLY element structures.
+///
+/// Note: Optional fields (`Option<T>`) are only supported when reading PLY files.
+/// When writing, all properties must have a value, so `Option<T>` is not allowed.
 #[proc_macro_derive(PlyAccess, attributes(ply))]
 pub fn derive_ply_access(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
+    let name = &input.ident;
 
     // Reuse logic from PropertyAccess derive
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => panic!("PlyAccess only supports named fields"),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyAccess only supports named fields").to_compile_error()),
         },
-        _ => panic!("PlyAccess only supports structs"),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyAccess only supports structs").to_compile_error()),
     };
 
     let mut set_arms = Vec::new();
     let mut schema_entries = Vec::new();
     let mut type_schema_entries = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
 
     // Getters
     let mut get_char_arms = Vec::new();
@@ -244,32 +319,66 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
     for field in fields {
         let field_name = &field.ident;
         let field_type = &field.ty;
-        let mut ply_name = field_name.as_ref().unwrap().to_string();
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
+        let ply_name = ply_attr.name;
 
-        for attr in &field.attrs {
-            if attr.path().is_ident("ply") {
-                let _ = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        let value = meta.value()?;
-                        let s: syn::LitStr = value.parse()?;
-                        ply_name = s.value();
-                    }
-                    Ok(())
-                });
-            }
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
         }
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
 
         let is_opt = is_option(field_type);
         let conversion_type = if let Some(inner) = is_opt.as_ref() { inner } else { field_type };
-        let conversion = generate_conversion(conversion_type);
+
+        // Support explicit type override even for generic fields
+        let conversion = if let Some(et) = ply_attr.explicit_type.as_deref() {
+            let ply_rs = get_crate_name();
+            let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
+                match s {
+                    "char" | "i8" => Some(quote! { i8 }),
+                    "uchar" | "u8" => Some(quote! { u8 }),
+                    "short" | "i16" => Some(quote! { i16 }),
+                    "ushort" | "u16" => Some(quote! { u16 }),
+                    "int" | "i32" => Some(quote! { i32 }),
+                    "uint" | "u32" => Some(quote! { u32 }),
+                    "float" | "f32" => Some(quote! { f32 }),
+                    "double" | "f64" => Some(quote! { f64 }),
+                    _ => None,
+                }
+            };
+            if let Some(cast_ty) = scalar_type_from_str(et) {
+                let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                Ok(quote! {
+                    match property {
+                        #(#scalar_variants)*
+                        _ => None,
+                    }.map(|v: #cast_ty| v)
+                })
+            } else {
+                 generate_conversion(conversion_type)
+            }
+        } else {
+             generate_conversion(conversion_type)
+        };
+
+        let conversion = match conversion {
+            Ok(tokens) => tokens,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
         let arm = if is_opt.is_some() {
             quote! {
                 #ply_name_lit => {
                     if let Some(val) = #conversion {
-                        self.#field_name = Some(val);
+                        let mut _val = val;
+                        unsafe {
+                            self.#field_name = Some(std::ptr::read(&mut _val as *mut _ as *const _));
+                            std::mem::forget(_val);
+                        }
                     }
                 }
             }
@@ -277,44 +386,84 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
             quote! {
                 #ply_name_lit => {
                     if let Some(val) = #conversion {
-                        self.#field_name = val;
+                        let mut _val = val;
+                        unsafe {
+                            self.#field_name = std::ptr::read(&mut _val as *mut _ as *const _);
+                            std::mem::forget(_val);
+                        }
                     }
                 }
             }
         };
         set_arms.push(arm);
 
+        let ply_rs = get_crate_name();
         let requiredness = if is_opt.is_some() {
-            quote! { ply_rs_bw::ply::Requiredness::Optional }
+            quote! { #ply_rs::ply::Requiredness::Optional }
         } else {
-            quote! { ply_rs_bw::ply::Requiredness::Required }
+            quote! { #ply_rs::ply::Requiredness::Required }
         };
         schema_entries.push(quote! {
             (#ply_name_lit.to_string(), #requiredness)
         });
 
-        let prop_type_token = get_property_type_tokens(conversion_type);
+        let prop_type_token = match get_property_type_tokens(field_type, ply_attr.count_type.as_deref(), ply_attr.explicit_type.as_deref(), Some(field)) {
+            Ok(tokens) => tokens,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
         type_schema_entries.push(quote! {
              (#ply_name_lit.to_string(), #prop_type_token)
         });
 
         // Getter logic
-        let field_access_scalar = if is_opt.is_some() {
-             quote! { self.#field_name }
+        let effective_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
+            let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
+                match s {
+                    "char" | "i8" => Some(ScalarKind::I8),
+                    "uchar" | "u8" => Some(ScalarKind::U8),
+                    "short" | "i16" => Some(ScalarKind::I16),
+                    "ushort" | "u16" => Some(ScalarKind::U16),
+                    "int" | "i32" => Some(ScalarKind::I32),
+                    "uint" | "u32" => Some(ScalarKind::U32),
+                    "float" | "f32" => Some(ScalarKind::F32),
+                    "double" | "f64" => Some(ScalarKind::F64),
+                    _ => None,
+                }
+            };
+            scalar_type_from_str_kind(et)
         } else {
-             quote! { Some(self.#field_name) }
-        };
-        
-        let field_access_list = if is_opt.is_some() {
-             quote! { self.#field_name.as_deref() }
-        } else {
-             quote! { Some(self.#field_name.as_slice()) }
+            scalar_ident(conversion_type)
         };
 
-        if let Some(inner) = is_vec(conversion_type) {
+        if let Some(inner_vec_type) = is_vec(conversion_type) {
              // List type
-             if let Some(kind) = scalar_ident(inner) {
+             let inner_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
+                let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
+                    match s {
+                        "char" | "i8" => Some(ScalarKind::I8),
+                        "uchar" | "u8" => Some(ScalarKind::U8),
+                        "short" | "i16" => Some(ScalarKind::I16),
+                        "ushort" | "u16" => Some(ScalarKind::U16),
+                        "int" | "i32" => Some(ScalarKind::I32),
+                        "uint" | "u32" => Some(ScalarKind::U32),
+                        "float" | "f32" => Some(ScalarKind::F32),
+                        "double" | "f64" => Some(ScalarKind::F64),
+                        _ => None,
+                    }
+                };
+                scalar_type_from_str_kind(et)
+             } else {
+                scalar_ident(inner_vec_type)
+             };
+
+             if let Some(kind) = inner_kind {
                  use ScalarKind::*;
+                 let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
+                 let field_access_list = if is_opt.is_some() {
+                      quote! { self.#field_name.as_deref().map(|v| v as &[#cast_ty]) }
+                 } else {
+                      quote! { Some(self.#field_name.as_slice() as &[#cast_ty]) }
+                 };
                  let arm = quote! { key if key == #ply_name_lit => #field_access_list, };
                  match kind {
                     I8 => get_list_char_arms.push(arm),
@@ -327,9 +476,29 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
                     F64 => get_list_double_arms.push(arm),
                  }
              }
-        } else if let Some(kind) = scalar_ident(conversion_type) {
+        } else if let Some(kind) = effective_kind {
              // Scalar type
              use ScalarKind::*;
+             let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
+             let field_access_scalar = if is_opt.is_some() {
+                  quote! { self.#field_name.map(|v| {
+                      let mut _v = v;
+                      unsafe {
+                          let _casted: #cast_ty = std::ptr::read(&mut _v as *mut _ as *const _);
+                          std::mem::forget(_v);
+                          _casted
+                      }
+                  }) }
+             } else {
+                  quote! { Some({
+                      let mut _v = self.#field_name;
+                      unsafe {
+                          let _casted: #cast_ty = std::ptr::read(&mut _v as *mut _ as *const _);
+                          std::mem::forget(_v);
+                          _casted
+                      }
+                  }) }
+             };
              let arm = quote! { key if key == #ply_name_lit => #field_access_scalar, };
              match kind {
                 I8 => get_char_arms.push(arm),
@@ -344,10 +513,12 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
         }
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ply_rs = get_crate_name();
     let expanded = quote! {
-        impl ply_rs_bw::ply::PropertyAccess for #name where #name: Default {
+        impl #impl_generics #ply_rs::ply::PropertyAccess for #name #ty_generics #where_clause {
             fn new() -> Self { Default::default() }
-            fn set_property(&mut self, key: &str, property: ply_rs_bw::ply::Property) {
+            fn set_property(&mut self, key: &str, property: #ply_rs::ply::Property) {
                 match key {
                     #( #set_arms )*
                     _ => {},
@@ -371,13 +542,13 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
             fn get_list_float(&self, key: &str) -> Option<&[f32]> { match key { #( #get_list_float_arms )* _ => None } }
             fn get_list_double(&self, key: &str) -> Option<&[f64]> { match key { #( #get_list_double_arms )* _ => None } }
         }
-        impl ply_rs_bw::ply::PropertySchema for #name {
-            fn schema() -> Vec<(String, ply_rs_bw::ply::Requiredness)> {
+        impl #impl_generics #ply_rs::ply::PropertySchema for #name #ty_generics #where_clause {
+            fn schema() -> Vec<(String, #ply_rs::ply::Requiredness)> {
                 vec![ #( #schema_entries ),* ]
             }
         }
-        impl ply_rs_bw::ply::PropertyTypeSchema for #name {
-            fn property_type_schema() -> Vec<(String, ply_rs_bw::ply::PropertyType)> {
+        impl #impl_generics #ply_rs::ply::PropertyTypeSchema for #name #ty_generics #where_clause {
+            fn property_type_schema() -> Vec<(String, #ply_rs::ply::PropertyType)> {
                 vec![ #( #type_schema_entries ),* ]
             }
         }
@@ -393,51 +564,51 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FromPly, attributes(ply))]
 pub fn derive_from_ply(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
+    let name = &input.ident;
 
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => panic!("FromPly only supports named fields"),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "FromPly only supports named fields").to_compile_error()),
         },
-        _ => panic!("FromPly only supports structs"),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "FromPly only supports structs").to_compile_error()),
     };
 
     let mut field_names = Vec::new();
     let mut inner_tys = Vec::new();
     let mut ply_names = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
 
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
-        let mut ply_name = field_name.to_string();
+        let ply_name = match parse_ply_name(field) {
+            Ok(name) => name,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
-        let inner_ty = is_vec(field_type).expect("FromPly currently only supports Vec<T> fields");
-
-        for attr in &field.attrs {
-            if attr.path().is_ident("ply") {
-                let _ = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        let value = meta.value()?;
-                        let s: syn::LitStr = value.parse()?;
-                        ply_name = s.value();
-                    }
-                    Ok(())
-                });
-            }
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply element name: {}", ply_name)).to_compile_error());
         }
+
+        let inner_ty = match is_vec(field_type) {
+            Some(ty) => ty,
+            None => return TokenStream::from(syn::Error::new_spanned(field_type, "FromPly currently only supports Vec<T> fields").to_compile_error()),
+        };
 
         field_names.push(field_name);
         inner_tys.push(inner_ty);
         ply_names.push(ply_name);
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ply_rs = get_crate_name();
     let expanded = quote! {
-        impl ply_rs_bw::parser::FromPly for #name {
-            fn read_ply<T: std::io::Read>(reader: &mut T) -> std::io::Result<Self> {
+        impl #impl_generics #ply_rs::parser::FromPly for #name #ty_generics #where_clause {
+            fn read_ply<_T_READER: std::io::Read>(reader: &mut _T_READER) -> std::io::Result<Self> {
                 let mut reader = std::io::BufReader::new(reader);
                 // We need a parser to read the header. Any element type will do.
-                let parser = ply_rs_bw::parser::Parser::<ply_rs_bw::ply::DefaultElement>::new();
+                let parser = #ply_rs::parser::Parser::<#ply_rs::ply::DefaultElement>::new();
                 let header = parser.read_header(&mut reader)?;
 
                 #(
@@ -448,13 +619,13 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
                     match name.as_str() {
                         #(
                             #ply_names => {
-                                let p = ply_rs_bw::parser::Parser::<#inner_tys>::new();
+                                let p = #ply_rs::parser::Parser::<#inner_tys>::new();
                                 #field_names = p.read_payload_for_element(&mut reader, element_def, &header)?;
                             }
                         )*
                         _ => {
                              // skip unknown elements
-                             let p = ply_rs_bw::parser::Parser::<ply_rs_bw::ply::DefaultElement>::new();
+                             let p = #ply_rs::parser::Parser::<#ply_rs::ply::DefaultElement>::new();
                              let _ = p.read_payload_for_element(&mut reader, element_def, &header)?;
                         }
                     }
@@ -489,33 +660,35 @@ fn is_option(ty: &Type) -> Option<&Type> {
 /// Generates the conversion logic from a `Property` to a specific Rust type.
 ///
 /// Handles both scalar types and `Vec<T>` for list properties.
-fn generate_conversion(ty: &Type) -> proc_macro2::TokenStream {
+fn generate_conversion(ty: &Type) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let ply_rs = get_crate_name();
+
     // Recognize scalars and Vec<scalar>
     if let Some(inner) = is_vec(ty) {
         let elem = scalar_ident(inner);
         if let Some(elem_ty) = elem {
-            let (list_variants, _cast) = list_match_and_cast_tokens(&elem_ty);
-            return quote! {
+            let (list_variants, cast_ty) = list_match_and_cast_tokens(&elem_ty, &ply_rs);
+            return Ok(quote! {
                 match property {
                     #(#list_variants)*
                     _ => None,
-                }
-            };
+                }.map(|v: Vec<#cast_ty>| v)
+            });
         }
     }
 
     if let Some(s) = scalar_ident(ty) {
-        let (scalar_variants, _cast) = scalar_match_and_cast_tokens(&s);
-        return quote! {
+        let (scalar_variants, cast_ty) = scalar_match_and_cast_tokens(&s, &ply_rs);
+        return Ok(quote! {
             match property {
                 #(#scalar_variants)*
                 _ => None,
-            }
-        };
+            }.map(|v: #cast_ty| v)
+        });
     }
 
     // Fallback: not recognized
-    quote! { None }
+    Err(syn::Error::new_spanned(ty, "Unsupported field type for PlyAccess. Supported types: i8, u8, i16, u16, i32, u32, f32, f64, and Vec<T> of these."))
 }
 
 /// Checks if a type is `Vec<T>` and returns the inner type `T`.
@@ -540,6 +713,9 @@ enum ScalarKind { I8, U8, I16, U16, I32, U32, F32, F64 }
 fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
     if let Type::Path(tp) = ty {
         if let Some(seg) = tp.path.segments.last() {
+            if !seg.arguments.is_empty() {
+                return None;
+            }
             return match seg.ident.to_string().as_str() {
                 "i8" => Some(ScalarKind::I8),
                 "u8" => Some(ScalarKind::U8),
@@ -557,7 +733,7 @@ fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
 }
 
 /// Generates match arms and casting logic for scalar properties.
-fn scalar_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
+fn scalar_match_and_cast_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStream) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
     use ScalarKind::*;
     let cast_ty = match kind {
         I8 => quote!{ i8 },
@@ -569,21 +745,25 @@ fn scalar_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStr
         F32 => quote!{ f32 },
         F64 => quote!{ f64 },
     };
+    scalar_match_and_cast_tokens_with_ty(&cast_ty, ply_rs)
+}
+
+fn scalar_match_and_cast_tokens_with_ty(cast_ty: &proc_macro2::TokenStream, ply_rs: &proc_macro2::TokenStream) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
     let arms = vec![
-        quote!{ ply_rs_bw::ply::Property::Char(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::UChar(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::Short(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::UShort(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::Int(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::UInt(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::Float(v) => Some(v as #cast_ty), },
-        quote!{ ply_rs_bw::ply::Property::Double(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::Char(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::UChar(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::Short(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::UShort(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::Int(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::UInt(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::Float(v) => Some(v as #cast_ty), },
+        quote!{ #ply_rs::ply::Property::Double(v) => Some(v as #cast_ty), },
     ];
-    (arms, cast_ty)
+    (arms, cast_ty.clone())
 }
 
 /// Generates match arms and casting logic for list properties.
-fn list_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
+fn list_match_and_cast_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStream) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
     use ScalarKind::*;
     let cast_ty = match kind {
         I8 => quote!{ i8 },
@@ -596,14 +776,14 @@ fn list_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStrea
         F64 => quote!{ f64 },
     };
     let arms = vec![
-        quote!{ ply_rs_bw::ply::Property::ListChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListUChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListUShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListUInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListFloat(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ ply_rs_bw::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListUChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListUShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListUInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListFloat(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
     ];
     (arms, cast_ty)
 }
@@ -615,72 +795,71 @@ fn list_match_and_cast_tokens(kind: &ScalarKind) -> (Vec<proc_macro2::TokenStrea
 #[proc_macro_derive(ToPly, attributes(ply))]
 pub fn derive_to_ply(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
+    let name = &input.ident;
 
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => panic!("ToPly only supports named fields"),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "ToPly only supports named fields").to_compile_error()),
         },
-        _ => panic!("ToPly only supports structs"),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "ToPly only supports structs").to_compile_error()),
     };
 
     let mut element_defs = Vec::new();
     let mut payload_writes = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
 
     for field in fields {
         let field_name = &field.ident;
         let field_type = &field.ty;
-        let mut ply_name = field_name.as_ref().unwrap().to_string();
+        let ply_name = match parse_ply_name(field) {
+            Ok(name) => name,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
-        for attr in &field.attrs {
-            if attr.path().is_ident("ply") {
-                let _ = attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("name") {
-                        if let Ok(value) = meta.value() {
-                            if let Ok(s) = value.parse::<syn::LitStr>() {
-                                ply_name = s.value();
-                            }
-                        }
-                    }
-                    Ok(())
-                });
-            }
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply element name: {}", ply_name)).to_compile_error());
         }
-        
-        let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
-        let inner_ty = is_vec(field_type).expect("ToPly fields must be Vec<T>");
 
+        let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
+        let inner_ty = match is_vec(field_type) {
+            Some(ty) => ty,
+            None => return TokenStream::from(syn::Error::new_spanned(field_type, "ToPly fields must be Vec<T>").to_compile_error()),
+        };
+
+        let ply_rs = get_crate_name();
         element_defs.push(quote! {
             {
-                let mut element = ply_rs_bw::ply::ElementDef::new(#ply_name_lit.to_string());
+                let mut element = #ply_rs::ply::ElementDef::new(#ply_name_lit.to_string());
                 element.count = self.#field_name.len();
-                let props = <#inner_ty as ply_rs_bw::ply::PropertyTypeSchema>::property_type_schema();
+                let props = <#inner_ty as #ply_rs::ply::PropertyTypeSchema>::property_type_schema();
                 for (name, ty) in props {
-                    ply_rs_bw::ply::Addable::add(&mut element.properties, ply_rs_bw::ply::PropertyDef::new(name, ty));
+                    #ply_rs::ply::Addable::add(&mut element.properties, #ply_rs::ply::PropertyDef::new(name, ty));
                 }
-                ply_rs_bw::ply::Addable::add(&mut header.elements, element);
+                #ply_rs::ply::Addable::add(&mut header.elements, element);
             }
         });
 
         payload_writes.push(quote! {
             {
                 let element_def = header.elements.get(#ply_name_lit).expect("Element definition missing");
-                let w = ply_rs_bw::writer::Writer::<#inner_ty>::new();
-                w.write_payload_of_element(writer, &self.#field_name, element_def, &header)?;
+                let w = #ply_rs::writer::Writer::<#inner_ty>::new();
+                written += w.write_payload_of_element(writer, &self.#field_name, element_def, &header)?;
             }
         });
     }
 
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let ply_rs = get_crate_name();
     let expanded = quote! {
-        impl ply_rs_bw::writer::ToPly for #name {
+        impl #impl_generics #ply_rs::writer::ToPly for #name #ty_generics #where_clause {
             fn write_ply<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<usize> {
-                let mut header = ply_rs_bw::ply::Header::new();
-                header.encoding = ply_rs_bw::ply::Encoding::Ascii; // Defaulting to Ascii
+                let mut header = #ply_rs::ply::Header::new();
+                header.encoding = #ply_rs::ply::Encoding::Ascii; // Defaulting to Ascii
                 
                 #( #element_defs )*
                 
-                let w = ply_rs_bw::writer::Writer::<ply_rs_bw::ply::DefaultElement>::new();
+                let w = #ply_rs::writer::Writer::<#ply_rs::ply::DefaultElement>::new();
                 let mut written = w.write_header(writer, &header)?;
                 
                 #( #payload_writes )*
@@ -693,37 +872,83 @@ pub fn derive_to_ply(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-fn get_property_type_tokens(ty: &Type) -> proc_macro2::TokenStream {
+fn get_property_type_tokens(ty: &Type, count_type: Option<&str>, explicit_type: Option<&str>, field_span: Option<&syn::Field>) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let ply_rs = get_crate_name();
+
+    let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
+        match s {
+            "char" | "i8" => Some(quote! { #ply_rs::ply::ScalarType::Char }),
+            "uchar" | "u8" => Some(quote! { #ply_rs::ply::ScalarType::UChar }),
+            "short" | "i16" => Some(quote! { #ply_rs::ply::ScalarType::Short }),
+            "ushort" | "u16" => Some(quote! { #ply_rs::ply::ScalarType::UShort }),
+            "int" | "i32" => Some(quote! { #ply_rs::ply::ScalarType::Int }),
+            "uint" | "u32" => Some(quote! { #ply_rs::ply::ScalarType::UInt }),
+            "float" | "f32" => Some(quote! { #ply_rs::ply::ScalarType::Float }),
+            "double" | "f64" => Some(quote! { #ply_rs::ply::ScalarType::Double }),
+            _ => None,
+        }
+    };
+
     if let Some(inner) = is_vec(ty) {
-         if let Some(kind) = scalar_ident(inner) {
-             let (scalar_type_token, _) = scalar_type_tokens(&kind);
-             return quote! {
-                 ply_rs_bw::ply::PropertyType::List(ply_rs_bw::ply::ScalarType::UChar, #scalar_type_token)
-             };
-         }
+        let count_scalar_type = if let Some(ct) = count_type {
+            scalar_type_from_str(ct).ok_or_else(|| {
+                let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+                syn::Error::new(span, format!("Unsupported count type: {}. Use one of: i8, u8, i16, u16, i32, u32, char, uchar, short, ushort, int, uint", ct))
+            })?
+        } else {
+            quote! { #ply_rs::ply::ScalarType::UChar }
+        };
+
+        let elem_scalar_type = if let Some(et) = explicit_type {
+            scalar_type_from_str(et).ok_or_else(|| {
+                let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+                syn::Error::new(span, format!("Unsupported explicit type: {}. Use one of: i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double", et))
+            })?
+        } else if let Some(kind) = scalar_ident(inner) {
+            let (scalar_type_token, _) = scalar_type_tokens(&kind, &ply_rs);
+            scalar_type_token
+        } else {
+            return Err(syn::Error::new_spanned(inner, "Unsupported field type for PlyAccess. Supported types: i8, u8, i16, u16, i32, u32, f32, f64, and Vec<T> of these."));
+        };
+
+        return Ok(quote! {
+            #ply_rs::ply::PropertyType::List(#count_scalar_type, #elem_scalar_type)
+        });
     }
+
+    if let Some(et) = explicit_type {
+        let scalar_type_token = scalar_type_from_str(et).ok_or_else(|| {
+            let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+            syn::Error::new(span, format!("Unsupported explicit type: {}. Use one of: i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double", et))
+        })?;
+        return Ok(quote! {
+            #ply_rs::ply::PropertyType::Scalar(#scalar_type_token)
+        });
+    }
+
     if let Some(kind) = scalar_ident(ty) {
-         let (scalar_type_token, _) = scalar_type_tokens(&kind);
-         return quote! {
-             ply_rs_bw::ply::PropertyType::Scalar(#scalar_type_token)
-         };
+        let (scalar_type_token, _) = scalar_type_tokens(&kind, &ply_rs);
+        return Ok(quote! {
+            #ply_rs::ply::PropertyType::Scalar(#scalar_type_token)
+        });
     }
-    if let Some(inner) = is_option(ty) {
-        return get_property_type_tokens(inner);
+
+    if is_option(ty).is_some() {
+        return Err(syn::Error::new_spanned(ty, "optional properties are only supported by the reader"));
     }
-    quote! { ply_rs_bw::ply::PropertyType::Scalar(ply_rs_bw::ply::ScalarType::Int) }
+    Err(syn::Error::new_spanned(ty, "Unsupported field type for PlyAccess. Supported types: i8, u8, i16, u16, i32, u32, f32, f64, and Vec<T> of these."))
 }
 
-fn scalar_type_tokens(kind: &ScalarKind) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+fn scalar_type_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStream) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     use ScalarKind::*;
     match kind {
-        I8 => (quote!{ ply_rs_bw::ply::ScalarType::Char }, quote!{ i8 }),
-        U8 => (quote!{ ply_rs_bw::ply::ScalarType::UChar }, quote!{ u8 }),
-        I16 => (quote!{ ply_rs_bw::ply::ScalarType::Short }, quote!{ i16 }),
-        U16 => (quote!{ ply_rs_bw::ply::ScalarType::UShort }, quote!{ u16 }),
-        I32 => (quote!{ ply_rs_bw::ply::ScalarType::Int }, quote!{ i32 }),
-        U32 => (quote!{ ply_rs_bw::ply::ScalarType::UInt }, quote!{ u32 }),
-        F32 => (quote!{ ply_rs_bw::ply::ScalarType::Float }, quote!{ f32 }),
-        F64 => (quote!{ ply_rs_bw::ply::ScalarType::Double }, quote!{ f64 }),
+        I8 => (quote!{ #ply_rs::ply::ScalarType::Char }, quote!{ i8 }),
+        U8 => (quote!{ #ply_rs::ply::ScalarType::UChar }, quote!{ u8 }),
+        I16 => (quote!{ #ply_rs::ply::ScalarType::Short }, quote!{ i16 }),
+        U16 => (quote!{ #ply_rs::ply::ScalarType::UShort }, quote!{ u16 }),
+        I32 => (quote!{ #ply_rs::ply::ScalarType::Int }, quote!{ i32 }),
+        U32 => (quote!{ #ply_rs::ply::ScalarType::UInt }, quote!{ u32 }),
+        F32 => (quote!{ #ply_rs::ply::ScalarType::Float }, quote!{ f32 }),
+        F64 => (quote!{ #ply_rs::ply::ScalarType::Double }, quote!{ f64 }),
     }
 }

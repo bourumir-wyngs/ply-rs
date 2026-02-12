@@ -335,6 +335,36 @@ macro_rules! get_prop(
     ($e:expr) => (match $e {None => return Err(io::Error::new(ErrorKind::InvalidInput, "No property available for given key.")), Some(x) => x})
 );
 
+fn ensure_len_fits(index_type: &ScalarType, len: usize) -> Result<()> {
+    let fits = match *index_type {
+        ScalarType::Char => len <= i8::MAX as usize,
+        ScalarType::UChar => len <= u8::MAX as usize,
+        ScalarType::Short => len <= i16::MAX as usize,
+        ScalarType::UShort => len <= u16::MAX as usize,
+        ScalarType::Int => len <= i32::MAX as usize,
+        ScalarType::UInt => len <= u32::MAX as usize,
+        ScalarType::Float | ScalarType::Double => false,
+    };
+    if fits { return Ok(()); }
+    let ty = match *index_type {
+        ScalarType::Char => "char",
+        ScalarType::UChar => "uchar",
+        ScalarType::Short => "short",
+        ScalarType::UShort => "ushort",
+        ScalarType::Int => "int",
+        ScalarType::UInt => "uint",
+        ScalarType::Float => "float",
+        ScalarType::Double => "double",
+    };
+    Err(io::Error::new(
+        ErrorKind::InvalidInput,
+        format!(
+            "List length {} does not fit into count type {}. Use code like #[ply(count = \"u16\")] to set a wider variable",
+            len, ty
+        ),
+    ))
+}
+
 /// # Ascii
 impl<E: PropertyAccess> Writer<E> {
 
@@ -364,15 +394,15 @@ impl<E: PropertyAccess> Writer<E> {
                 ScalarType::Float => self.write_ascii_scalar(out, get_prop!(element.get_float(k))),
                 ScalarType::Double => self.write_ascii_scalar(out, get_prop!(element.get_double(k))),
             },
-            PropertyType::List(_, ref scalar_type) => match *scalar_type {
-                ScalarType::Char => self.write_ascii_list(get_prop!(element.get_list_char(k)), out),
-                ScalarType::UChar => self.write_ascii_list(get_prop!(element.get_list_uchar(k)), out),
-                ScalarType::Short => self.write_ascii_list(get_prop!(element.get_list_short(k)), out),
-                ScalarType::UShort => self.write_ascii_list(get_prop!(element.get_list_ushort(k)), out),
-                ScalarType::Int => self.write_ascii_list(get_prop!(element.get_list_int(k)), out),
-                ScalarType::UInt => self.write_ascii_list(get_prop!(element.get_list_uint(k)), out),
-                ScalarType::Float => self.write_ascii_list(get_prop!(element.get_list_float(k)), out),
-                ScalarType::Double => self.write_ascii_list(get_prop!(element.get_list_double(k)), out),
+            PropertyType::List(ref index_type, ref scalar_type) => match *scalar_type {
+                ScalarType::Char => { let list = get_prop!(element.get_list_char(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::UChar => { let list = get_prop!(element.get_list_uchar(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::Short => { let list = get_prop!(element.get_list_short(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::UShort => { let list = get_prop!(element.get_list_ushort(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::Int => { let list = get_prop!(element.get_list_int(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::UInt => { let list = get_prop!(element.get_list_uint(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::Float => { let list = get_prop!(element.get_list_float(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
+                ScalarType::Double => { let list = get_prop!(element.get_list_double(k)); ensure_len_fits(index_type, list.len())?; self.write_ascii_list(list, out) },
             }
         }
     }
@@ -444,6 +474,7 @@ impl<E: PropertyAccess> Writer<E> {
                         ScalarType::Float => get_prop!(element.get_list_float(k)).len(),
                         ScalarType::Double => get_prop!(element.get_list_double(k)).len(),
                     };
+                    ensure_len_fits(index_type, vec_len)?;
                     written += match *index_type {
                         ScalarType::Char => {out.write_i8(vec_len as i8)?; 1},
                         ScalarType::UChar => {out.write_u8(vec_len as u8)?; 1},
