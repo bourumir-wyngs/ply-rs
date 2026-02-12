@@ -29,9 +29,11 @@
 pub mod parser;
 pub mod ply;
 pub mod writer;
+
+extern crate self as ply_rs_bw;
  
-pub use ply_rs_macros::{PlyAccess, FromPly, ToPly, PropertyAccess, PropertySchema};
-pub use ply::PlyAccess;
+pub use ply_rs_macros::{PlyRead, PlyWrite, FromPly, ToPly, PropertyAccess, PropertySchema};
+pub use ply::{PlyRead, PlyWrite};
 pub use parser::FromPly;
 pub use writer::ToPly;
 

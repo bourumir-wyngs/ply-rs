@@ -1,7 +1,7 @@
-use ply_rs_bw::{PlyAccess, ToPly, FromPly, PropertyAccess as PropertyAccessDerive, PropertySchema};
+use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly, PropertyAccess as PropertyAccessDerive, PropertySchema};
 use ply_rs_bw::ply::{Property, PropertyAccess};
 
-#[derive(Debug, Default, PlyAccess, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct AllScalars {
     #[ply(name = "char")]
     c: i8,
@@ -21,7 +21,7 @@ struct AllScalars {
     d: f64,
 }
 
-#[derive(Debug, Default, PlyAccess, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct AllLists {
     #[ply(name = "list_char")]
     lc: Vec<i8>,
@@ -178,10 +178,10 @@ struct SimpleMesh {
     vertices: Vec<AllScalars>,
 }
 
-#[derive(Debug, Default, PlyAccess, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct GenericVertex<T>
 where
-    T: Default + Copy + 'static,
+    T: Default + Copy + 'static + ply_rs_bw::ply::SetProperty<f32> + ply_rs_bw::ply::GetProperty<f32>,
 {
     #[ply(type = "float")]
     x: T,
@@ -210,7 +210,7 @@ fn test_generic_struct_ply_access() {
 #[derive(Debug, ToPly, FromPly, PartialEq)]
 struct GenericMesh<T>
 where
-    T: Default + Copy + 'static,
+    T: Default + Copy + 'static + ply_rs_bw::ply::SetProperty<f32> + ply_rs_bw::ply::GetProperty<f32>,
 {
     #[ply(name = "vertex")]
     vertices: Vec<GenericVertex<T>>,
@@ -250,4 +250,17 @@ fn test_simple_mesh_roundtrip() {
     let read_mesh = SimpleMesh::read_ply(&mut cursor).unwrap();
 
     assert_eq!(mesh, read_mesh);
+}
+
+#[derive(Debug, Default, PropertyAccessDerive, PropertySchema, Clone, PartialEq)]
+struct ListWithExplicitTypePA {
+    #[ply(name = "indices", type = "uint")]
+    indices: Vec<u32>,
+}
+
+#[test]
+fn test_list_with_explicit_type_pa() {
+    let mut l = ListWithExplicitTypePA::default();
+    l.set_property("indices", Property::ListInt(vec![1, 2, 3]));
+    assert_eq!(l.indices, vec![1, 2, 3]);
 }

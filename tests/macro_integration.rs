@@ -1,6 +1,6 @@
-use ply_rs_bw::{PlyAccess, ToPly, FromPly};
+use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 
-#[derive(Debug, Default, PlyAccess, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct Vertex {
     #[ply(name = "x")]
     x: f32,
@@ -10,7 +10,7 @@ struct Vertex {
     z: f32,
 }
 
-#[derive(Debug, Default, PlyAccess, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct Face {
     #[ply(name = "vertex_indices")]
     indices: Vec<i32>,

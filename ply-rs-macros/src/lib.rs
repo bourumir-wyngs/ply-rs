@@ -1,36 +1,46 @@
-//!
 //! Procedural macros for the ply-rs-bw crate.
 //!
-//! The primary user-facing derive is `#[derive(PlyAccess)]`, which generates
-//! implementations for both `PropertyAccess` and `PropertySchema]` for a struct.
+//! The primary user-facing derives are:
+//! - `#[derive(PlyRead)]`: Generates implementations for `PropertyAccess` and `PropertySchema`.
+//!   It supports optional fields using `Option<T>`.
+//! - `#[derive(PlyWrite)]`: Generates an implementation for `PropertyTypeSchema`.
+//!   It does NOT support `Option<T>`.
+//! - `#[derive(ToPly)]`: Generates an implementation for `ToPly` on a container struct.
+//!   Requires that element types implement `PropertyAccess` and `PropertyTypeSchema`.
+//!
 //! Fields can be annotated with `#[ply(name = "...")]` to bind them to specific
-//! PLY property names. Optional fields (i.e., `Option<T>`) are treated as optional
-//! properties in the header validation; all other fields are required.
+//! PLY property names.
 //!
 //! Additionally, `#[derive(FromPly)]` can be used on a container struct to map
-//! PLY element names to `Vec<T>` fields (`T: PlyAccess`). This enables loading a
+//! PLY element names to `Vec<T>` fields (`T: PlyRead`). This enables loading a
 //! whole file with a single call to `Container::read_ply(&mut reader)`.
+//!
+//! Reading and Writing
+//! --------------------
+//! For a struct to be both readable and writable, it should derive both `PlyRead` and `PlyWrite`.
+//! If a struct contains optional properties (`Option<T>`), it should only derive `PlyRead`,
+//! as PLY does not support missing properties per element.
 //!
 //! Examples
 //! --------
 //! Define element types and a mesh container:
 //!
 //! ```ignore
-//! use ply_rs_bw::{PlyAccess, FromPly};
+//! use ply_rs_bw::{PlyRead, PlyWrite, FromPly, ToPly};
 //!
-//! #[derive(Debug, Default, PlyAccess)]
+//! #[derive(Debug, Default, PlyRead, PlyWrite)]
 //! struct Vertex {
 //!     #[ply(name = "x")] x: f32,
 //!     #[ply(name = "y")] y: f32,
 //!     #[ply(name = "z")] z: f32,
 //! }
 //!
-//! #[derive(Debug, Default, PlyAccess)]
+//! #[derive(Debug, Default, PlyRead, PlyWrite)]
 //! struct Face {
 //!     #[ply(name = "vertex_indices")] indices: Vec<u32>,
 //! }
 //!
-//! #[derive(Debug, FromPly)]
+//! #[derive(Debug, FromPly, ToPly)]
 //! struct Mesh {
 //!     #[ply(name = "vertex")] vertices: Vec<Vertex>,
 //!     #[ply(name = "face")] faces: Vec<Face>,
@@ -112,14 +122,16 @@ fn parse_ply_name(field: &syn::Field) -> Result<String, syn::Error> {
 
 /// Procedural macro to derive the `PropertyAccess` trait.
 ///
-/// This macro generates the `set_property` method, which maps PLY property names
-/// to struct fields and handles type conversions.
+/// This macro generates the `set_property` method and various `get_*` methods, 
+/// which map PLY property names to struct fields and handle type conversions.
 ///
 /// Supported attributes:
 /// - `#[ply(name = "property_name")]`: Maps the field to a specific PLY property name.
+/// - `#[ply(type = "ply_type")]`: Explicitly specifies the PLY property type.
 ///
 /// Note: Optional fields (`Option<T>`) are only supported when reading PLY files.
-/// When writing, all properties must have a value, so `Option<T>` is not allowed.
+/// Use `PlyRead` to automatically derive `PropertyAccess` and `PropertySchema` 
+/// with support for optional fields.
 #[proc_macro_derive(PropertyAccess, attributes(ply))]
 pub fn derive_property_access(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -135,14 +147,16 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
 
     let mut set_arms = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
+    let ply_rs = get_crate_name();
 
     for field in fields {
         let field_name = &field.ident;
         let field_type = &field.ty;
-        let ply_name = match parse_ply_name(field) {
-            Ok(name) => name,
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+        let ply_name = ply_attr.name;
 
         if !seen_names.insert(ply_name.clone()) {
             return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
@@ -151,11 +165,47 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
 
         let is_opt = is_option(field_type);
+        let conversion_type = if let Some(inner) = is_opt.as_ref() { inner } else { field_type };
         
-        let conversion = if let Some(inner_type) = is_opt.as_ref() {
-             generate_conversion(inner_type)
+        // Support explicit type override even for generic fields
+        let conversion = if let Some(et) = ply_attr.explicit_type.as_deref() {
+            let ply_rs = get_crate_name();
+            let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
+                match s {
+                    "char" | "i8" => Some(quote! { i8 }),
+                    "uchar" | "u8" => Some(quote! { u8 }),
+                    "short" | "i16" => Some(quote! { i16 }),
+                    "ushort" | "u16" => Some(quote! { u16 }),
+                    "int" | "i32" => Some(quote! { i32 }),
+                    "uint" | "u32" => Some(quote! { u32 }),
+                    "float" | "f32" => Some(quote! { f32 }),
+                    "double" | "f64" => Some(quote! { f64 }),
+                    _ => None,
+                }
+            };
+            if let Some(cast_ty) = scalar_type_from_str(et) {
+                if let Some(_inner_vec) = is_vec(conversion_type) {
+                    let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                    Ok(quote! {
+                        match property {
+                            #(#list_variants)*
+                            _ => None,
+                        }.map(|v: Vec<#cast_ty>| v)
+                    })
+                } else {
+                    let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                    Ok(quote! {
+                        match property {
+                            #(#scalar_variants)*
+                            _ => None,
+                        }.map(|v: #cast_ty| v)
+                    })
+                }
+            } else {
+                 generate_conversion(conversion_type)
+            }
         } else {
-             generate_conversion(field_type)
+             generate_conversion(conversion_type)
         };
 
         let conversion = match conversion {
@@ -163,33 +213,14 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
 
-        let arm = if is_opt.is_some() {
-            quote! {
-                #ply_name_lit => {
-                    if let Some(val) = #conversion {
-                        let mut _val = val;
-                        unsafe {
-                            self.#field_name = Some(std::ptr::read(&mut _val as *mut _ as *const _));
-                            std::mem::forget(_val);
-                        }
-                    }
-                }
-            }
-        } else {
-            quote! {
-                #ply_name_lit => {
-                    if let Some(val) = #conversion {
-                        let mut _val = val;
-                        unsafe {
-                            self.#field_name = std::ptr::read(&mut _val as *mut _ as *const _);
-                            std::mem::forget(_val);
-                        }
-                    }
+        let arm = quote! {
+            #ply_name_lit => {
+                if let Some(val) = #conversion {
+                    #ply_rs::ply::SetProperty::set(&mut self.#field_name, val);
                 }
             }
         };
         set_arms.push(arm);
-
     }
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -270,31 +301,29 @@ pub fn derive_property_schema(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Procedural macro to derive the `PlyAccess` trait.
+/// Procedural macro to derive the `PlyRead` trait.
 ///
 /// This is a convenience macro that derives both `PropertyAccess` and `PropertySchema`.
-/// It is the primary macro for defining PLY element structures.
+/// It is the primary macro for defining PLY element structures for reading.
 ///
-/// Note: Optional fields (`Option<T>`) are only supported when reading PLY files.
-/// When writing, all properties must have a value, so `Option<T>` is not allowed.
-#[proc_macro_derive(PlyAccess, attributes(ply))]
-pub fn derive_ply_access(input: TokenStream) -> TokenStream {
+/// Note: Optional fields (`Option<T>`) are supported when reading PLY files.
+#[proc_macro_derive(PlyRead, attributes(ply))]
+pub fn derive_ply_read(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
-    // Reuse logic from PropertyAccess derive
     let fields = match input.data {
         Data::Struct(ref data) => match data.fields {
             Fields::Named(ref fields) => &fields.named,
-            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyAccess only supports named fields").to_compile_error()),
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyRead only supports named fields").to_compile_error()),
         },
-        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyAccess only supports structs").to_compile_error()),
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyRead only supports structs").to_compile_error()),
     };
 
     let mut set_arms = Vec::new();
     let mut schema_entries = Vec::new();
-    let mut type_schema_entries = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
+    let ply_rs = get_crate_name();
 
     // Getters
     let mut get_char_arms = Vec::new();
@@ -351,13 +380,23 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
                 }
             };
             if let Some(cast_ty) = scalar_type_from_str(et) {
-                let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
-                Ok(quote! {
-                    match property {
-                        #(#scalar_variants)*
-                        _ => None,
-                    }.map(|v: #cast_ty| v)
-                })
+                if let Some(_inner_vec) = is_vec(conversion_type) {
+                    let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                    Ok(quote! {
+                        match property {
+                            #(#list_variants)*
+                            _ => None,
+                        }.map(|v: Vec<#cast_ty>| v)
+                    })
+                } else {
+                    let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                    Ok(quote! {
+                        match property {
+                            #(#scalar_variants)*
+                            _ => None,
+                        }.map(|v: #cast_ty| v)
+                    })
+                }
             } else {
                  generate_conversion(conversion_type)
             }
@@ -370,34 +409,15 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
 
-        let arm = if is_opt.is_some() {
-            quote! {
-                #ply_name_lit => {
-                    if let Some(val) = #conversion {
-                        let mut _val = val;
-                        unsafe {
-                            self.#field_name = Some(std::ptr::read(&mut _val as *mut _ as *const _));
-                            std::mem::forget(_val);
-                        }
-                    }
-                }
-            }
-        } else {
-            quote! {
-                #ply_name_lit => {
-                    if let Some(val) = #conversion {
-                        let mut _val = val;
-                        unsafe {
-                            self.#field_name = std::ptr::read(&mut _val as *mut _ as *const _);
-                            std::mem::forget(_val);
-                        }
-                    }
+        let arm = quote! {
+            #ply_name_lit => {
+                if let Some(val) = #conversion {
+                    #ply_rs::ply::SetProperty::set(&mut self.#field_name, val);
                 }
             }
         };
         set_arms.push(arm);
 
-        let ply_rs = get_crate_name();
         let requiredness = if is_opt.is_some() {
             quote! { #ply_rs::ply::Requiredness::Optional }
         } else {
@@ -405,14 +425,6 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
         };
         schema_entries.push(quote! {
             (#ply_name_lit.to_string(), #requiredness)
-        });
-
-        let prop_type_token = match get_property_type_tokens(field_type, ply_attr.count_type.as_deref(), ply_attr.explicit_type.as_deref(), Some(field)) {
-            Ok(tokens) => tokens,
-            Err(err) => return TokenStream::from(err.to_compile_error()),
-        };
-        type_schema_entries.push(quote! {
-             (#ply_name_lit.to_string(), #prop_type_token)
         });
 
         // Getter logic
@@ -480,25 +492,7 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
              // Scalar type
              use ScalarKind::*;
              let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
-             let field_access_scalar = if is_opt.is_some() {
-                  quote! { self.#field_name.map(|v| {
-                      let mut _v = v;
-                      unsafe {
-                          let _casted: #cast_ty = std::ptr::read(&mut _v as *mut _ as *const _);
-                          std::mem::forget(_v);
-                          _casted
-                      }
-                  }) }
-             } else {
-                  quote! { Some({
-                      let mut _v = self.#field_name;
-                      unsafe {
-                          let _casted: #cast_ty = std::ptr::read(&mut _v as *mut _ as *const _);
-                          std::mem::forget(_v);
-                          _casted
-                      }
-                  }) }
-             };
+             let field_access_scalar = quote! { #ply_rs::ply::GetProperty::<#cast_ty>::get(&self.#field_name) };
              let arm = quote! { key if key == #ply_name_lit => #field_access_scalar, };
              match kind {
                 I8 => get_char_arms.push(arm),
@@ -514,7 +508,6 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
     }
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let ply_rs = get_crate_name();
     let expanded = quote! {
         impl #impl_generics #ply_rs::ply::PropertyAccess for #name #ty_generics #where_clause {
             fn new() -> Self { Default::default() }
@@ -547,6 +540,64 @@ pub fn derive_ply_access(input: TokenStream) -> TokenStream {
                 vec![ #( #schema_entries ),* ]
             }
         }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Procedural macro to derive the `PlyWrite` trait.
+///
+/// This macro derives `PropertyTypeSchema` for a struct.
+/// It is used in conjunction with `PlyRead` or a manual implementation of `PropertyAccess`
+/// to define PLY element structures for writing.
+///
+/// Note: Optional fields (`Option<T>`) are NOT supported by `PlyWrite`.
+#[proc_macro_derive(PlyWrite, attributes(ply))]
+pub fn derive_ply_write(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+
+    let fields = match input.data {
+        Data::Struct(ref data) => match data.fields {
+            Fields::Named(ref fields) => &fields.named,
+            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyWrite only supports named fields").to_compile_error()),
+        },
+        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "PlyWrite only supports structs").to_compile_error()),
+    };
+
+    let mut type_schema_entries = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
+    let ply_rs = get_crate_name();
+
+    for field in fields {
+        let field_type = &field.ty;
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
+        let ply_name = ply_attr.name;
+
+        if !seen_names.insert(ply_name.clone()) {
+            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
+        }
+
+        let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
+
+        if is_option(field_type).is_some() {
+             return TokenStream::from(syn::Error::new_spanned(field_type, "optional properties are only supported by the reader. PlyWrite does not support Option<T>.").to_compile_error());
+        }
+
+        let prop_type_token = match get_property_type_tokens(field_type, ply_attr.count_type.as_deref(), ply_attr.explicit_type.as_deref(), Some(field)) {
+            Ok(tokens) => tokens,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
+        type_schema_entries.push(quote! {
+             (#ply_name_lit.to_string(), #prop_type_token)
+        });
+    }
+
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let expanded = quote! {
         impl #impl_generics #ply_rs::ply::PropertyTypeSchema for #name #ty_generics #where_clause {
             fn property_type_schema() -> Vec<(String, #ply_rs::ply::PropertyType)> {
                 vec![ #( #type_schema_entries ),* ]
@@ -775,6 +826,10 @@ fn list_match_and_cast_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStre
         F32 => quote!{ f32 },
         F64 => quote!{ f64 },
     };
+    list_match_and_cast_tokens_with_ty(&cast_ty, ply_rs)
+}
+
+fn list_match_and_cast_tokens_with_ty(cast_ty: &proc_macro2::TokenStream, ply_rs: &proc_macro2::TokenStream) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
     let arms = vec![
         quote!{ #ply_rs::ply::Property::ListChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
         quote!{ #ply_rs::ply::Property::ListUChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
@@ -785,7 +840,7 @@ fn list_match_and_cast_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStre
         quote!{ #ply_rs::ply::Property::ListFloat(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
         quote!{ #ply_rs::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
     ];
-    (arms, cast_ty)
+    (arms, cast_ty.clone())
 }
 
 /// Procedural macro to derive the `ToPly` trait.

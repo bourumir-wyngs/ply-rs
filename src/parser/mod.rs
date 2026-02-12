@@ -143,7 +143,7 @@ impl<E: PropertyAccess> Parser<E> {
 }
 
 // use ply::{ Header, Encoding };
-use crate::ply::{ PropertyAccess, Version, ObjInfo, Comment, ElementDef, KeyMap, Addable, PlyAccess };
+use crate::ply::{ PropertyAccess, Version, ObjInfo, Comment, ElementDef, KeyMap, Addable, PlyRead };
 /*
 use util::LocationTracker;
 use super::Parser;
@@ -351,7 +351,7 @@ pub trait FromPly {
     fn read_ply<T: Read>(reader: &mut T) -> Result<Self> where Self: Sized;
 }
 
-impl<E: PlyAccess> FromPly for Ply<E> {
+impl<E: PlyRead> FromPly for Ply<E> {
     fn read_ply<T: Read>(reader: &mut T) -> Result<Self> {
         let parser = Parser::<E>::new();
         parser.read_ply(reader)

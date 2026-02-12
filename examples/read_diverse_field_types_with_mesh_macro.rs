@@ -1,7 +1,7 @@
-use ply_rs_bw::{FromPly, PlyAccess};
+use ply_rs_bw::{FromPly, PlyRead};
 use std::fs::File;
 
-#[derive(Debug, Default, PlyAccess)]
+#[derive(Debug, Default, PlyRead)]
 struct Vertex {
     // we use maximal abstraction (ply types and names are inferred).
     x: f32,
@@ -9,7 +9,7 @@ struct Vertex {
     z: f32,
 }
 
-#[derive(Debug, Default, PlyAccess)]
+#[derive(Debug, Default, PlyRead)]
 struct Face {
     // we use maximum details
     #[ply(name = "vertex_indices", type = "uint", count = "uchar")]

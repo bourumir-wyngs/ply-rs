@@ -203,17 +203,63 @@ pub enum Requiredness {
 ///
 /// This is used by the parser to validate that all required properties are present
 /// in the PLY header before attempting to read the payload.
+///
+/// Optional properties (using `Option<T>`) are allowed when reading.
 pub trait PropertySchema {
     /// Returns a list of properties (name and requiredness) expected by this type.
     fn schema() -> Vec<(String, Requiredness)>;
 }
 
 /// Trait that describes the schema of a property including its type.
+///
+/// Note: Optional properties (`Option<T>`) are NOT supported for writing
+/// because the PLY format requires every element instance to have a value
+/// for every property declared in the header.
 pub trait PropertyTypeSchema {
     /// Returns a list of properties (name and type) expected by this type.
     fn property_type_schema() -> Vec<(String, PropertyType)>;
 }
 
+/// Helper trait to safely set a value into a field, possibly with conversion.
+pub trait SetProperty<T> {
+    /// Sets the value.
+    fn set(&mut self, val: T);
+}
+
+impl<T> SetProperty<T> for T {
+    fn set(&mut self, val: T) {
+        *self = val;
+    }
+}
+
+impl<T> SetProperty<T> for Option<T> {
+    fn set(&mut self, val: T) {
+        *self = Some(val);
+    }
+}
+
+/// Helper trait to safely get a value from a field, possibly with conversion.
+pub trait GetProperty<T> {
+    /// Gets the value.
+    fn get(&self) -> Option<T>;
+}
+
+impl<T: Copy> GetProperty<T> for T {
+    fn get(&self) -> Option<T> {
+        Some(*self)
+    }
+}
+
+impl<T: Copy> GetProperty<T> for Option<T> {
+    fn get(&self) -> Option<T> {
+        *self
+    }
+}
+
 /// Allows a type to be automatically parsed from a PLY element.
-pub trait PlyAccess: PropertyAccess + PropertySchema + PropertyTypeSchema {}
-impl<T: PropertyAccess + PropertySchema + PropertyTypeSchema> PlyAccess for T {}
+pub trait PlyRead: PropertyAccess + PropertySchema {}
+impl<T: PropertyAccess + PropertySchema> PlyRead for T {}
+
+/// Allows a type to be automatically written to a PLY element.
+pub trait PlyWrite: PropertyTypeSchema {}
+impl<T: PropertyTypeSchema> PlyWrite for T {}
