@@ -657,6 +657,11 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         impl #impl_generics #ply_rs::parser::FromPly for #name #ty_generics #where_clause {
             fn read_ply<_T_READER: std::io::Read>(reader: &mut _T_READER) -> std::io::Result<Self> {
+                struct IgnoredElement;
+                impl #ply_rs::ply::PropertyAccess for IgnoredElement {
+                    fn new() -> Self { IgnoredElement }
+                }
+
                 let mut reader = std::io::BufReader::new(reader);
                 // We need a parser to read the header. Any element type will do.
                 let parser = #ply_rs::parser::Parser::<#ply_rs::ply::DefaultElement>::new();
@@ -676,7 +681,7 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
                         )*
                         _ => {
                              // skip unknown elements
-                             let p = #ply_rs::parser::Parser::<#ply_rs::ply::DefaultElement>::new();
+                             let p = #ply_rs::parser::Parser::<IgnoredElement>::new();
                              let _ = p.read_payload_for_element(&mut reader, element_def, &header)?;
                         }
                     }
