@@ -699,17 +699,13 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
 
 /// Checks if a type is `Option<T>` and returns the inner type `T`.
 fn is_option(ty: &Type) -> Option<&Type> {
-    if let Type::Path(tp) = ty {
-        if let Some(seg) = tp.path.segments.last() {
-            if seg.ident == "Option" {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+    if let Type::Path(tp) = ty
+        && let Some(seg) = tp.path.segments.last()
+            && seg.ident == "Option"
+                && let PathArguments::AngleBracketed(args) = &seg.arguments
+                    && let Some(GenericArgument::Type(inner)) = args.args.first() {
                         return Some(inner);
                     }
-                }
-            }
-        }
-    }
     None
 }
 
@@ -749,17 +745,13 @@ fn generate_conversion(ty: &Type) -> Result<proc_macro2::TokenStream, syn::Error
 
 /// Checks if a type is `Vec<T>` and returns the inner type `T`.
 fn is_vec(ty: &Type) -> Option<&Type> {
-    if let Type::Path(tp) = ty {
-        if let Some(seg) = tp.path.segments.last() {
-            if seg.ident == "Vec" {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(GenericArgument::Type(inner)) = args.args.first() {
+    if let Type::Path(tp) = ty
+        && let Some(seg) = tp.path.segments.last()
+            && seg.ident == "Vec"
+                && let PathArguments::AngleBracketed(args) = &seg.arguments
+                    && let Some(GenericArgument::Type(inner)) = args.args.first() {
                         return Some(inner);
                     }
-                }
-            }
-        }
-    }
     None
 }
 
@@ -767,8 +759,8 @@ enum ScalarKind { I8, U8, I16, U16, I32, U32, F32, F64 }
 
 /// Identifies supported scalar types.
 fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
-    if let Type::Path(tp) = ty {
-        if let Some(seg) = tp.path.segments.last() {
+    if let Type::Path(tp) = ty
+        && let Some(seg) = tp.path.segments.last() {
             if !seg.arguments.is_empty() {
                 return None;
             }
@@ -784,7 +776,6 @@ fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
                 _ => None,
             };
         }
-    }
     None
 }
 
@@ -952,7 +943,7 @@ fn get_property_type_tokens(ty: &Type, count_type: Option<&str>, explicit_type: 
     if let Some(inner) = is_vec(ty) {
         let count_scalar_type = if let Some(ct) = count_type {
             scalar_type_from_str(ct).ok_or_else(|| {
-                let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+                let span = field_span.map(syn::spanned::Spanned::span).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
                 syn::Error::new(span, format!("Unsupported count type: {}. Use one of: i8, u8, i16, u16, i32, u32, char, uchar, short, ushort, int, uint", ct))
             })?
         } else {
@@ -961,7 +952,7 @@ fn get_property_type_tokens(ty: &Type, count_type: Option<&str>, explicit_type: 
 
         let elem_scalar_type = if let Some(et) = explicit_type {
             scalar_type_from_str(et).ok_or_else(|| {
-                let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+                let span = field_span.map(syn::spanned::Spanned::span).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
                 syn::Error::new(span, format!("Unsupported explicit type: {}. Use one of: i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double", et))
             })?
         } else if let Some(kind) = scalar_ident(inner) {
@@ -978,7 +969,7 @@ fn get_property_type_tokens(ty: &Type, count_type: Option<&str>, explicit_type: 
 
     if let Some(et) = explicit_type {
         let scalar_type_token = scalar_type_from_str(et).ok_or_else(|| {
-            let span = field_span.map(|f| syn::spanned::Spanned::span(f)).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
+            let span = field_span.map(syn::spanned::Spanned::span).unwrap_or_else(|| syn::spanned::Spanned::span(ty));
             syn::Error::new(span, format!("Unsupported explicit type: {}. Use one of: i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double", et))
         })?;
         return Ok(quote! {
