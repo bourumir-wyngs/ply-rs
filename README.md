@@ -26,62 +26,67 @@ It focuses on two main points:
 
 ## Getting started
 
-This is the easiest way to read a ply file:
+A PLY file consists of 3D points (vertices), which are defined separately, and faces that connect these vertices into triangles (or sometimes other polygons). Faces are typically short arrays of three indices that specify which vertices form a triangle From 3.1.0, it is possible to use macros, significantly reducing the necessary boilerplate: 
 
 ```rust
-use ply_rs_bw as ply;
+use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 
-fn main() {
-    //Set up a reader, in this case, a file.
-    let path = "example_plys/greg_turk_example1_ok_ascii.ply";
-    let mut f = std::fs::File::open(path).unwrap();
-
-    // create a parser
-    let p = ply::parser::Parser::<ply::ply::DefaultElement>::new();
-
-    // use the parser: read the entire file
-    let ply = p.read_ply(&mut f);
-
-    // make sure it did work
-    assert!(ply.is_ok());
-    let ply = ply.unwrap();
-
-    // proof that data has been read
-    println!("Ply header: {:#?}", ply.header);
-    println!("Ply data: {:?}", ply.payload);
+#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+struct Vertex {
+    // we use maximal abstraction (ply types and names are inferred).
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
-```
+#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+struct Face {
+    // we use maximum details
+    #[ply(name = "vertex_indices", type = "uint", count = "uchar")]
+    indices: Vec<u32>,
+}
 
-### Write ply file
+#[derive(Debug, ToPly, FromPly, PartialEq)]
+struct Mesh {
+    #[ply(name = "vertex")]
+    vertices: Vec<Vertex>,
+    #[ply(name = "face")]
+    faces: Vec<Face>,
+}
 
-The simplest case of writing a ply file:
+#[test]
+#[cfg(not(miri))]
+fn test_write_read_tetrahedron_macros() {
+    // Create mesh
+    let vertices = vec![
+        Vertex { x: 1.0, y: 1.0, z: 1.0 },
+        Vertex { x: 1.0, y: -1.0, z: -1.0 },
+        Vertex { x: -1.0, y: 1.0, z: -1.0 },
+        Vertex { x: -1.0, y: -1.0, z: 1.0 },
+    ];
 
-```rust
-use ply_rs_bw::ply::{ Ply, DefaultElement };
-use ply_rs_bw::writer::{ Writer };
+    let faces = vec![
+        Face { indices: vec![0, 1, 2] },
+        Face { indices: vec![0, 3, 1] },
+        Face { indices: vec![0, 2, 3] },
+        Face { indices: vec![1, 3, 2] },
+    ];
 
-/// Demonstrates simplest use case for reading from a file.
-fn main() {
-    // set up a target could also be a file
+    let mesh = Mesh { vertices, faces };
+
+    // Write
     let mut buf = Vec::<u8>::new();
+    mesh.write_ply(&mut buf).unwrap();
 
-    // create a ply object
-    let mut ply = Ply::<DefaultElement>::new();
+    // Read back
+    let mut cursor = std::io::Cursor::new(buf);
+    let read_mesh = Mesh::read_ply(&mut cursor).unwrap();
 
-    // set up a writer
-    let w = Writer::new();
-    let written = w.write_ply(&mut buf, &mut ply).unwrap();
-    println!("{} bytes written", written);
-    println!("buffer size: {}", buf.len());
-
-    // proof that data has been read
-
-    // We can use `from_utf8` since PLY files only contain ASCII characters
-    let output = String::from_utf8(buf).unwrap();
-    println!("Written data:\n{}", output);
+    // Assert
+    assert_eq!(mesh, read_mesh);
 }
 ```
+
 
 For more complicated examples, please see the [examples](examples/).
 

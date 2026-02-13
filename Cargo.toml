@@ -40,7 +40,7 @@ name = "read_ply_to_structs"
 name = "read_diverse_field_types"
 
 [[example]]
-name = "read_diverse_field_types_with_mesh_macro"
+name = "read_with_macro"
 
 [[example]]
 name = "write_empty_ply"
