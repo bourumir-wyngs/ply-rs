@@ -111,6 +111,11 @@ impl<E: PropertyAccess> Writer<E> {
 pub trait ToPly {
     /// Writes the structure to a PLY file.
     fn write_ply<W: Write>(&self, writer: &mut W) -> PlyResult<usize>;
+
+    /// Writes the structure to a PLY file with the specified encoding.
+    fn write_ply_with_encoding<W: Write>(&self, writer: &mut W, _encoding: Encoding) -> PlyResult<usize> {
+        self.write_ply(writer)
+    }
 }
 
 /*

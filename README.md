@@ -9,17 +9,10 @@
 [![crates.io](https://img.shields.io/crates/d/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
 [![docs.rs](https://docs.rs/ply-rs-bw/badge.svg)](https://docs.rs/ply-rs-bw)
 
-This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was created to address the use of `linked-hash-map` to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). 
-
-The crate has been renamed to `ply-rs-bw,` and minor issues were resolved to ensure compatibility with Rust 2024
-edition. Additionally, an example has been added to demonstrate how to read PLY files with diverse field types
-(e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). Semantic versioning is now adopted for consistent version management. The API compatibility badge checks for breaking changes relative to the current major version (`N.*.*`). 
-
-The reason we changed from 3.x to 4.x is that `ply_rs_bw::ply::PropertyType` and  `ply_rs_bw::ply::ScalarType` now implement `Copy` that semver checker considers the breaking change.
-
+This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was initially created to address the use of `linked-hash-map` to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). After first making minor tweaks and adding examples, we currently made more major extensions by proposing to use macros for working with ply data structures.
 ***
 
-Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. See [`examples/write_tetrahedron.rs`](examples/write_tetrahedron.rs) for a demonstration of writing binary PLY files.
+Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. See [`examples/write_with_macro.rs`](examples/write_with_macro.rs) (new API) and [`examples/write_tetrahedron.rs`](examples/write_tetrahedron.rs) for a demonstration of writing binary PLY files.
 
 It focuses on two main points:
 
@@ -50,7 +43,7 @@ struct Face {
 
 #[derive(Debug, ToPly, FromPly, PartialEq)]
 struct Mesh {
-    #[ply(name = "vertex")]
+    #[ply(name = "vertex, vertices")] // multiple possible to support alternatives
     vertices: Vec<Vertex>,
     #[ply(name = "face")]
     faces: Vec<Face>,
@@ -88,8 +81,11 @@ fn test_write_read_tetrahedron_macros() {
     assert_eq!(mesh, read_mesh);
 }
 ```
+## Data types
+Standard PLY data types are: char (i8), uchar (u8), short (i16), ushort (u16), int (i32), uint (u32), float (f32), double (f64). Types like u64, i64, u128, and i128 that this library supports are not part of the official standard and are considered extensions in some implementations.  
 
+For more complicated examples, please see the [examples](examples/). Example [examples/colors_normals_cameras.rs](examples/colors_normals_cameras.rs) shows how to define read/write data beyond vertices and faces.
 
-For more complicated examples, please see the [examples](examples/).
+The old 3.x.x API is not removed and also available if preferred.
 
 This implementation is mainly based on [these specifications](http://paulbourke.net/dataformats/ply/) with additions from [here](https://people.sc.fsu.edu/%7Ejburkardt/data/ply/ply.txt).
