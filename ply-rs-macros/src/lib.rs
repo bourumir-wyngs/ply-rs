@@ -88,9 +88,9 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Type, PathArguments, GenericArgument};
 use proc_macro_crate::{crate_name, FoundCrate};
+use quote::quote;
+use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericArgument, PathArguments, Type};
 
 fn get_crate_name() -> proc_macro2::TokenStream {
     let found_crate = crate_name("ply-rs-bw");
