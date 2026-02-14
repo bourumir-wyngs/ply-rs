@@ -86,6 +86,6 @@ Standard PLY data types are: char (i8), uchar (u8), short (i16), ushort (u16), i
 
 For more complicated examples, please see the [examples](examples/). Example [examples/colors_normals_cameras.rs](examples/colors_normals_cameras.rs) shows how to define read/write data beyond vertices and faces.
 
-The old 3.x.x API is not removed and also available if preferred.
+The old 3.x.x API is not removed and remains available if preferred. See [examples/write_tetrahedron.rs]() and [examples/write_tetrahedron.rs](examples/read_diverse_field_types.rs) for demonstrations how to use it. 
 
 This implementation is mainly based on [these specifications](http://paulbourke.net/dataformats/ply/) with additions from [here](https://people.sc.fsu.edu/%7Ejburkardt/data/ply/ply.txt).
