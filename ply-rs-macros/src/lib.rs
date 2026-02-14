@@ -89,14 +89,21 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro_crate::{crate_name, FoundCrate};
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{parse_macro_input, Data, DeriveInput, Fields, GenericArgument, PathArguments, Type};
 
 fn get_crate_name() -> proc_macro2::TokenStream {
     let found_crate = crate_name("ply-rs-bw");
 
     match found_crate {
-        Ok(FoundCrate::Itself) => quote!(::ply_rs_bw),
+        Ok(FoundCrate::Itself) => {
+            let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_default();
+            if crate_name == "ply_rs_bw" {
+                quote!(crate)
+            } else {
+                quote!(::ply_rs_bw)
+            }
+        },
         Ok(FoundCrate::Name(name)) => {
             let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
             quote!(::#ident)
@@ -138,7 +145,7 @@ fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
                     attr_data.explicit_type = Some(s.value());
                     Ok(())
                 } else {
-                    Err(meta.error(format!("unknown ply attribute: {}", meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default())))
+                    Err(meta.error(format!("unknown ply attribute: {}", meta.path.to_token_stream().to_string())))
                 }
             })?;
         }
@@ -276,39 +283,56 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
         // Support explicit type override even for generic fields
         let conversion = if let Some(et) = ply_attr.explicit_type.as_deref() {
             let ply_rs = get_crate_name();
-            let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
-                match s {
-                    "char" | "i8" => Some(quote! { i8 }),
-                    "uchar" | "u8" => Some(quote! { u8 }),
-                    "short" | "i16" => Some(quote! { i16 }),
-                    "ushort" | "u16" => Some(quote! { u16 }),
-                    "int" | "i32" => Some(quote! { i32 }),
-                    "uint" | "u32" => Some(quote! { u32 }),
-                    "float" | "f32" => Some(quote! { f32 }),
-                    "double" | "f64" => Some(quote! { f64 }),
-                    _ => None,
-                }
-            };
-            if let Some(cast_ty) = scalar_type_from_str(et) {
-                if let Some(_inner_vec) = is_vec(conversion_type) {
-                    let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
-                    Ok(quote! {
-                        match property {
-                            #(#list_variants)*
-                            _ => None,
-                        }.map(|v: Vec<#cast_ty>| v)
-                    })
-                } else {
-                    let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
-                    Ok(quote! {
-                        match property {
-                            #(#scalar_variants)*
-                            _ => None,
-                        }.map(|v: #cast_ty| v)
-                    })
-                }
+
+            let check_result = if let Some(target_kind) = scalar_kind_from_str(et) {
+                let inner_type = if let Some(inner) = is_vec(conversion_type) { inner } else { conversion_type };
+                if let Some(field_kind) = scalar_ident(inner_type) {
+                    if target_kind != field_kind {
+                        Some(Err(syn::Error::new_spanned(field, format!(
+                            "ply(type = \"{}\") implies type {}, but field is of type {}",
+                            et, target_kind, field_kind
+                        ))))
+                    } else { None }
+                } else { None }
+            } else { None };
+
+            if let Some(err) = check_result {
+                err
             } else {
-                 generate_conversion(conversion_type)
+                let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
+                    match s {
+                        "char" | "i8" => Some(quote! { i8 }),
+                        "uchar" | "u8" => Some(quote! { u8 }),
+                        "short" | "i16" => Some(quote! { i16 }),
+                        "ushort" | "u16" => Some(quote! { u16 }),
+                        "int" | "i32" => Some(quote! { i32 }),
+                        "uint" | "u32" => Some(quote! { u32 }),
+                        "float" | "f32" => Some(quote! { f32 }),
+                        "double" | "f64" => Some(quote! { f64 }),
+                        _ => None,
+                    }
+                };
+                if let Some(cast_ty) = scalar_type_from_str(et) {
+                    if let Some(_inner_vec) = is_vec(conversion_type) {
+                        let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                        Ok(quote! {
+                            match property {
+                                #(#list_variants)*
+                                _ => None,
+                            }
+                        })
+                    } else {
+                        let (scalar_variants, _) = scalar_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
+                        Ok(quote! {
+                            match property {
+                                #(#scalar_variants)*
+                                _ => None,
+                            }
+                        })
+                    }
+                } else {
+                    generate_conversion(conversion_type)
+                }
             }
         } else {
              generate_conversion(conversion_type)
@@ -386,7 +410,7 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
                  } else {
                       quote! { Some(self.#field_name.as_slice() as &[#cast_ty]) }
                  };
-                 let arm = quote! { key if key == #ply_name_lit => #field_access_list, };
+                 let arm = quote! { #ply_name_lit => #field_access_list, };
                  match kind {
                     I8 => get_list_char_arms.push(arm),
                     U8 => get_list_uchar_arms.push(arm),
@@ -403,7 +427,7 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
              use ScalarKind::*;
              let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
              let field_access_scalar = quote! { #ply_rs::ply::GetProperty::<#cast_ty>::get(&self.#field_name) };
-             let arm = quote! { key if key == #ply_name_lit => #field_access_scalar, };
+             let arm = quote! { #ply_name_lit => #field_access_scalar, };
              match kind {
                 I8 => get_char_arms.push(arm),
                 U8 => get_uchar_arms.push(arm),
@@ -633,23 +657,23 @@ fn generate_conversion(ty: &Type) -> Result<proc_macro2::TokenStream, syn::Error
     if let Some(inner) = is_vec(ty) {
         let elem = scalar_ident(inner);
         if let Some(elem_ty) = elem {
-            let (list_variants, cast_ty) = list_match_and_cast_tokens(&elem_ty, &ply_rs);
+            let (list_variants, _) = list_match_and_cast_tokens(&elem_ty, &ply_rs);
             return Ok(quote! {
                 match property {
                     #(#list_variants)*
                     _ => None,
-                }.map(|v: Vec<#cast_ty>| v)
+                }
             });
         }
     }
 
     if let Some(s) = scalar_ident(ty) {
-        let (scalar_variants, cast_ty) = scalar_match_and_cast_tokens(&s, &ply_rs);
+        let (scalar_variants, _) = scalar_match_and_cast_tokens(&s, &ply_rs);
         return Ok(quote! {
             match property {
                 #(#scalar_variants)*
                 _ => None,
-            }.map(|v: #cast_ty| v)
+            }
         });
     }
 
@@ -669,7 +693,37 @@ fn is_vec(ty: &Type) -> Option<&Type> {
     None
 }
 
+#[derive(PartialEq, Eq, Debug)]
 enum ScalarKind { I8, U8, I16, U16, I32, U32, F32, F64 }
+
+impl std::fmt::Display for ScalarKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScalarKind::I8 => write!(f, "i8"),
+            ScalarKind::U8 => write!(f, "u8"),
+            ScalarKind::I16 => write!(f, "i16"),
+            ScalarKind::U16 => write!(f, "u16"),
+            ScalarKind::I32 => write!(f, "i32"),
+            ScalarKind::U32 => write!(f, "u32"),
+            ScalarKind::F32 => write!(f, "f32"),
+            ScalarKind::F64 => write!(f, "f64"),
+        }
+    }
+}
+
+fn scalar_kind_from_str(s: &str) -> Option<ScalarKind> {
+    match s {
+        "char" | "i8" => Some(ScalarKind::I8),
+        "uchar" | "u8" => Some(ScalarKind::U8),
+        "short" | "i16" => Some(ScalarKind::I16),
+        "ushort" | "u16" => Some(ScalarKind::U16),
+        "int" | "i32" => Some(ScalarKind::I32),
+        "uint" | "u32" => Some(ScalarKind::U32),
+        "float" | "f32" => Some(ScalarKind::F32),
+        "double" | "f64" => Some(ScalarKind::F64),
+        _ => None,
+    }
+}
 
 /// Identifies supported scalar types.
 fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
@@ -741,14 +795,14 @@ fn list_match_and_cast_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStre
 
 fn list_match_and_cast_tokens_with_ty(cast_ty: &proc_macro2::TokenStream, ply_rs: &proc_macro2::TokenStream) -> (Vec<proc_macro2::TokenStream>, proc_macro2::TokenStream) {
     let arms = vec![
-        quote!{ #ply_rs::ply::Property::ListChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListUChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListUShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListUInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListFloat(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
-        quote!{ #ply_rs::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect()), },
+        quote!{ #ply_rs::ply::Property::ListChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListUChar(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListUShort(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListUInt(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListFloat(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
+        quote!{ #ply_rs::ply::Property::ListDouble(v) => Some(v.into_iter().map(|x| x as #cast_ty).collect::<Vec<#cast_ty>>()), },
     ];
     (arms, cast_ty.clone())
 }
@@ -917,3 +971,6 @@ fn scalar_type_tokens(kind: &ScalarKind, ply_rs: &proc_macro2::TokenStream) -> (
         F64 => (quote!{ #ply_rs::ply::ScalarType::Double }, quote!{ f64 }),
     }
 }
+
+#[cfg(test)]
+mod tests;
