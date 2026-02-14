@@ -47,4 +47,4 @@ name = "read_with_macro"
 name = "write_empty_ply"
 
 [[example]]
-name = "read_colors_normals_cameras"
+name = "colors_normals_cameras"
