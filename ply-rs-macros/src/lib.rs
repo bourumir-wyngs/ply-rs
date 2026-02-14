@@ -1,28 +1,59 @@
 //! Procedural macros for the ply-rs-bw crate.
 //!
-//! The primary user-facing derives are:
-//! - `#[derive(PlyRead)]`: Generates implementations for `PropertyAccess` and `ReadSchema`.
-//!   It supports optional fields using `Option<T>`.
-//! - `#[derive(PlyWrite)]`: Generates an implementation for `WriteSchema`.
-//!   It does NOT support `Option<T>`.
-//! - `#[derive(ToPly)]`: Generates an implementation for `ToPly` on a container struct.
-//!   Requires that element types implement `PropertyAccess` and `WriteSchema`.
+//! This crate provides derive macros to simplify working with PLY files.
 //!
-//! Fields can be annotated with `#[ply(name = "...")]` to bind them to specific
-//! PLY property names.
+//! # The Macros
 //!
-//! Additionally, `#[derive(FromPly)]` can be used on a container struct to map
-//! PLY element names to `Vec<T>` fields (`T: PlyRead`). This enables loading a
-//! whole file with a single call to `Container::read_ply(&mut reader)`.
+//! ## `#[derive(PlyRead)]`
 //!
-//! Reading and Writing
-//! --------------------
-//! For a struct to be both readable and writable, it should derive both `PlyRead` and `PlyWrite`.
-//! If a struct contains optional properties (`Option<T>`), it should only derive `PlyRead`,
-//! as PLY does not support missing properties per element.
+//! Use this macro to make a struct parsable from a PLY element.
 //!
-//! Examples
-//! --------
+//! - **Implements**: `PropertyAccess` and `ReadSchema`.
+//! - **Features**:
+//!     - Generates `new()`, `set_property()`, and `get_*()` methods.
+//!     - Handles `Option<T>` fields (mapping them to optional PLY properties).
+//! - **Usage**: Essential for reading. Also useful for writing (provides getters), unless you implement `PropertyAccess` manually.
+//!
+//! ## `#[derive(PlyWrite)]`
+//!
+//! Use this macro to define the PLY header structure for writing.
+//!
+//! - **Implements**: `WriteSchema`.
+//! - **Features**:
+//!     - Defines the element's properties for the PLY header.
+//! - **Constraint**: Does NOT support `Option<T>` (PLY files require uniform data for all elements).
+//! - **Usage**: Combine with `PlyRead` (or manual `PropertyAccess`) to write structs to a PLY file.
+//!
+//! ## `#[derive(ReadSchema)]`
+//!
+//! - **Implements**: `ReadSchema` only.
+//! - **Usage**: Use this if you implement `PropertyAccess` manually but want to generate the schema definition automatically.
+//!
+//! ## `#[derive(FromPly)]`
+//!
+//! Use this on a container struct (e.g. `Mesh`) to read an entire PLY file into strictly typed vectors.
+//!
+//! - **Implements**: `FromPly`.
+//! - **Usage**: The struct must have named fields of type `Vec<T>`, where `T` implements `PlyRead` (or `PropertyAccess` + `ReadSchema`).
+//!   The field names (or `#[ply(name="...")]`) map to PLY element names (e.g. "vertex", "face").
+//!
+//! ## `#[derive(ToPly)]`
+//!
+//! Use this on a container struct to write strictly typed vectors into a PLY file.
+//!
+//! - **Implements**: `ToPly`.
+//! - **Usage**: The struct must have named fields of type `Vec<T>`, where `T` implements `WriteSchema` and `PropertyAccess`.
+//!
+//! # Attributes
+//!
+//! Fields can be annotated with `#[ply(...)]` to customize behavior:
+//!
+//! - `#[ply(name = "prop_name")]`: Maps the Rust field to a PLY property/element named "prop_name".
+//! - `#[ply(type = "float")]`: (For `PlyRead`/`PlyWrite`) Enforces a specific PLY data type (e.g., "float", "uchar", "int").
+//! - `#[ply(count = "uchar")]`: (For `PlyWrite`) Specifies the type used for the count of a list property (only for `Vec<T>` fields).
+//!
+//! # Example
+//!
 //! Define element types and a mesh container:
 //!
 //! ```ignore
@@ -37,7 +68,7 @@
 //!
 //! #[derive(Debug, Default, PlyRead, PlyWrite)]
 //! struct Face {
-//!     #[ply(name = "vertex_indices")] indices: Vec<u32>,
+//!     #[ply(name = "vertex_indices")] indices: Vec<u32>; // Use explicit type or let it infer
 //! }
 //!
 //! #[derive(Debug, FromPly, ToPly)]
@@ -45,13 +76,14 @@
 //!     #[ply(name = "vertex")] vertices: Vec<Vertex>,
 //!     #[ply(name = "face")] faces: Vec<Face>,
 //! }
-//! ```
 //!
-//! Then read a file:
+//! // Reading
+//! // let mut file = std::fs::File::open("mesh.ply")?;
+//! // let mesh = Mesh::read_ply(&mut file)?;
 //!
-//! ```ignore
-//! let mut file = std::fs::File::open("mesh.ply")?;
-//! let mesh = Mesh::read_ply(&mut file)?;
+//! // Writing
+//! // let mut out = std::fs::File::create("out.ply")?;
+//! // mesh.write_ply(&mut out)?;
 //! ```
 extern crate proc_macro;
 
