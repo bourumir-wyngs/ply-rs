@@ -41,6 +41,14 @@ pub struct Writer<E: PropertyAccess> {
     phantom: PhantomData<E>,
 }
 
+impl<E: PropertyAccess> Clone for Writer<E> {
+    fn clone(&self) -> Self {
+        Writer { phantom: PhantomData }
+    }
+}
+
+impl<E: PropertyAccess> Copy for Writer<E> {}
+
 impl<E: PropertyAccess> Default for Writer<E> {
     fn default() -> Self {
         Self::new()
@@ -53,8 +61,8 @@ use writer::Writer;
 use ply::PropertyAccess;
 // */
 
-use std::io;
-use std::io::{ Write, Result, ErrorKind };
+use std::io::Write;
+use crate::errors::{PlyError, PlyResult};
 
 use crate::ply::Ply;
 
@@ -74,10 +82,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// If problems can be corrected automatically, `ply` will be modified accordingly.
     ///
     /// Returns number of bytes written.
-    pub fn write_ply<T: Write>(&self, out: &mut T, ply: &mut Ply<E>) -> Result<usize> {
+    pub fn write_ply<T: Write>(&self, out: &mut T, ply: &mut Ply<E>) -> PlyResult<usize> {
         match ply.make_consistent() {
             Ok(()) => (),
-            Err(e) => return Err(io::Error::new(ErrorKind::InvalidInput, format!("The given ply isn't consistent: {:?}", e))),
+            Err(e) => return Err(PlyError::Inconsistent(format!("The given ply isn't consistent: {}", e))),
         };
         self.write_ply_unchecked(out, ply)
     }
@@ -87,22 +95,22 @@ impl<E: PropertyAccess> Writer<E> {
     /// The user is responsible to provide a consistent `Ply`,
     /// if not, behaviour is undefined and might result
     /// in a corrupted output.
-    pub fn write_ply_unchecked<T: Write>(&self, out: &mut T, ply: &Ply<E>) -> Result<usize> {
+    pub fn write_ply_unchecked<T: Write>(&self, out: &mut T, ply: &Ply<E>) -> PlyResult<usize> {
         let mut written = 0;
         written += self.write_header(out, &ply.header)?;
         written += self.write_payload(out, &ply.payload, &ply.header)?;
         out.flush()?;
         Ok(written)
     }
-    fn write_new_line<T: Write>(&self, out: &mut T) -> Result<usize> {
-        out.write(b"\n")
+    fn write_new_line<T: Write>(&self, out: &mut T) -> PlyResult<usize> {
+        Ok(out.write(b"\n")?)
     }
 }
 
 /// Helper trait to simplify writing structure to PLY file.
 pub trait ToPly {
     /// Writes the structure to a PLY file.
-    fn write_ply<W: Write>(&self, writer: &mut W) -> Result<usize>;
+    fn write_ply<W: Write>(&self, writer: &mut W) -> PlyResult<usize>;
 }
 
 /*
@@ -121,7 +129,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes the magic number "ply" and a new line.
     ///
     /// Each PLY file must start with "ply\n".
-    pub fn write_line_magic_number<T: Write>(&self, out: &mut T) -> Result<usize> {
+    pub fn write_line_magic_number<T: Write>(&self, out: &mut T) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write("ply".as_bytes())?;
         written += self.write_new_line(out)?;
@@ -130,7 +138,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes "format <encoding> <version>".
     ///
     /// Each PLY file must define its format.
-    pub fn write_line_format<T: Write>(&self, out: &mut T, encoding: &Encoding, version: &Version) -> Result<usize> {
+    pub fn write_line_format<T: Write>(&self, out: &mut T, encoding: &Encoding, version: &Version) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write("format ".as_bytes())?;
         written += self.write_encoding(out, encoding)?;
@@ -141,7 +149,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes a comment line.
     ///
     /// A comment must not contain a line break and only consist of ascii characters.
-    pub fn write_line_comment<T: Write>(&self, out: &mut T, comment: &Comment) -> Result<usize> {
+    pub fn write_line_comment<T: Write>(&self, out: &mut T, comment: &Comment) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write(format!("comment {}", comment).as_bytes())?;
         written += self.write_new_line(out)?;
@@ -150,7 +158,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes an object information line.
     ///
     /// An object information line must not contain a line break and only consist of ASCII characters.
-    pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> Result<usize> {
+    pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write(format!("obj_info {}", obj_info).as_bytes())?;
         written += self.write_new_line(out)?;
@@ -162,7 +170,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// It is directly followed by its property definitions.
     ///
     /// Make sure the header is consistent with the payload.
-    pub fn write_line_element_definition<T: Write>(&self, out: &mut T, element: &ElementDef) -> Result<usize> {
+    pub fn write_line_element_definition<T: Write>(&self, out: &mut T, element: &ElementDef) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write(format!("element {} {}", element.name, element.count).as_bytes())?;
         written += self.write_new_line(out)?;
@@ -171,7 +179,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes a property line from the header: "property [list <index_type> <scalar_type> | <scalar_type> ]"
     ///
     /// Make sure the property definition is consistent with the payload.
-    pub fn write_line_property_definition<T: Write>(&self, out: &mut T, property: &PropertyDef) -> Result<usize> {
+    pub fn write_line_property_definition<T: Write>(&self, out: &mut T, property: &PropertyDef) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write("property ".as_bytes())?;
         written += self.write_property_type(out, &property.data_type)?;
@@ -185,7 +193,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Convenience method to call `write_line_element_definition` and `write_line_property_definition` in the correct way.
     ///
     /// Make sure the element definition is consistent with the payload.
-    pub fn write_element_definition<T: Write>(&self, out: &mut T, element: &ElementDef) -> Result<usize> {
+    pub fn write_element_definition<T: Write>(&self, out: &mut T, element: &ElementDef) -> PlyResult<usize> {
         let mut written = 0;
         written += self.write_line_element_definition(out, element)?;
         for (_, p) in &element.properties {
@@ -194,7 +202,7 @@ impl<E: PropertyAccess> Writer<E> {
         Ok(written)
     }
     /// Writes `end_header\n`. This terminates the header. Each following byte belongs to the payload.
-    pub fn write_line_end_header<T: Write>(&self, out: &mut T) -> Result<usize> {
+    pub fn write_line_end_header<T: Write>(&self, out: &mut T) -> PlyResult<usize> {
         let mut written = 0;
         written += out.write("end_header".as_bytes())?;
         written += self.write_new_line(out)?;
@@ -205,7 +213,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// It starts with writing the magic number "ply\n" and ends with "end_header".
     ///
     /// Make sure the header is consistent with the payload.
-    pub fn write_header<T: Write>(&self, out: &mut T, header: &Header) -> Result<usize> {
+    pub fn write_header<T: Write>(&self, out: &mut T, header: &Header) -> PlyResult<usize> {
         let mut written = 0;
         written += self.write_line_magic_number(out)?;
         written += self.write_line_format(out, &header.encoding, &header.version)?;
@@ -221,22 +229,22 @@ impl<E: PropertyAccess> Writer<E> {
         written += self.write_line_end_header(out)?;
         Ok(written)
     }
-    fn write_encoding<T: Write>(&self, out: &mut T, encoding: &Encoding) -> Result<usize> {
+    fn write_encoding<T: Write>(&self, out: &mut T, encoding: &Encoding) -> PlyResult<usize> {
         let s = match *encoding {
             Encoding::Ascii => "ascii",
             Encoding::BinaryBigEndian => "binary_big_endian",
             Encoding::BinaryLittleEndian => "binary_little_endian",
         };
-        out.write(s.as_bytes())
+        Ok(out.write(s.as_bytes())?)
     }
-    fn write_property_type<T: Write>(&self, out: &mut T, data_type: &PropertyType) -> Result<usize> {
+    fn write_property_type<T: Write>(&self, out: &mut T, data_type: &PropertyType) -> PlyResult<usize> {
         match *data_type {
             PropertyType::Scalar(ref scalar_type) => self.write_scalar_type(out, scalar_type),
             PropertyType::List(ref index_type, ref content_type) => {
                 let mut written = out.write("list ".as_bytes())?;
                 match *index_type {
-                    ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "List index can not be of type float.")),
-                    ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "List index can not be of type double.")),
+                    ScalarType::Float => return Err(PlyError::Inconsistent("List index can not be of type float.".to_string())),
+                    ScalarType::Double => return Err(PlyError::Inconsistent("List index can not be of type double.".to_string())),
                     _ => (),
                 };
                 written += self.write_scalar_type(out, index_type)?;
@@ -246,8 +254,8 @@ impl<E: PropertyAccess> Writer<E> {
             }
         }
     }
-    fn write_scalar_type<T: Write>(&self, out: &mut T, scalar_type: &ScalarType) -> Result<usize> {
-        match *scalar_type {
+    fn write_scalar_type<T: Write>(&self, out: &mut T, scalar_type: &ScalarType) -> PlyResult<usize> {
+        let res = match *scalar_type {
             ScalarType::Char => out.write("char".as_bytes()),
             ScalarType::UChar => out.write("uchar".as_bytes()),
             ScalarType::Short => out.write("short".as_bytes()),
@@ -256,7 +264,8 @@ impl<E: PropertyAccess> Writer<E> {
             ScalarType::UInt => out.write("uint".as_bytes()),
             ScalarType::Float => out.write("float".as_bytes()),
             ScalarType::Double => out.write("double".as_bytes()),
-        }
+        };
+        Ok(res?)
     }
 }
 /*
@@ -273,7 +282,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes the payload of a `ply` (`ply.payload`).
     ///
     /// Make sure the Header is consistent with the payload.
-    pub fn write_payload<T: Write>(&self, out: &mut T, payload: &Payload<E>, header: &Header) -> Result<usize> {
+    pub fn write_payload<T: Write>(&self, out: &mut T, payload: &Payload<E>, header: &Header) -> PlyResult<usize> {
         let mut written = 0;
         let element_defs = &header.elements;
         for (k, element_list) in payload {
@@ -285,7 +294,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Write all elements as stored in the `element_list`.
     ///
     /// Make sure the header and the element definition is consistent with the payload.
-    pub fn write_payload_of_element<T: Write>(&self, out: &mut T, element_list: &Vec<E>, element_def: &ElementDef, header: &Header) -> Result<usize> {
+    pub fn write_payload_of_element<T: Write>(&self, out: &mut T, element_list: &Vec<E>, element_def: &ElementDef, header: &Header) -> PlyResult<usize> {
         let mut written = 0;
         match header.encoding {
             Encoding::Ascii => for element in element_list {
@@ -320,22 +329,22 @@ impl<'a, W: Write> CountingWrite<'a, W> {
 }
 
 impl<W: Write> Write for CountingWrite<'_, W> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let n = self.inner.write(buf)?;
         self.bytes += n;
         Ok(n)
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
     }
 }
 
 macro_rules! get_prop(
-    ($e:expr) => (match $e {None => return Err(io::Error::new(ErrorKind::InvalidInput, "No property available for given key.")), Some(x) => x})
+    ($e:expr) => (match $e {None => return Err(PlyError::Inconsistent("No property available for given key.".to_string())), Some(x) => x})
 );
 
-fn ensure_len_fits(index_type: &ScalarType, len: usize) -> Result<()> {
+fn ensure_len_fits(index_type: &ScalarType, len: usize) -> PlyResult<()> {
     let fits = match *index_type {
         ScalarType::Char => len <= i8::MAX as usize,
         ScalarType::UChar => len <= u8::MAX as usize,
@@ -356,8 +365,7 @@ fn ensure_len_fits(index_type: &ScalarType, len: usize) -> Result<()> {
         ScalarType::Float => "float",
         ScalarType::Double => "double",
     };
-    Err(io::Error::new(
-        ErrorKind::InvalidInput,
+    Err(PlyError::Inconsistent(
         format!(
             "List length {} does not fit into count type {}. Use code like #[ply(count = \"u16\")] to set a wider variable",
             len, ty
@@ -369,7 +377,7 @@ fn ensure_len_fits(index_type: &ScalarType, len: usize) -> Result<()> {
 impl<E: PropertyAccess> Writer<E> {
 
     /// Write a single ascii formatted element.
-    pub fn write_ascii_element<T: Write>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
+    pub fn write_ascii_element<T: Write>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> PlyResult<usize> {
         let mut written = 0;
         let mut p_iter = element_def.properties.iter();
         let (_k, prop_type) = p_iter.next().unwrap();
@@ -381,7 +389,7 @@ impl<E: PropertyAccess> Writer<E> {
         written += self.write_new_line(out)?;
         Ok(written)
     }
-    fn write_ascii_property<T: Write>(&self, out: &mut T, element: &E, prop_type: &PropertyDef) -> Result<usize> {
+    fn write_ascii_property<T: Write>(&self, out: &mut T, element: &E, prop_type: &PropertyDef) -> PlyResult<usize> {
         let k = &prop_type.name;
         match prop_type.data_type {
             PropertyType::Scalar(ref scalar_type) => match *scalar_type {
@@ -406,12 +414,12 @@ impl<E: PropertyAccess> Writer<E> {
             }
         }
     }
-    fn write_ascii_scalar<T: Write, V: Display>(&self, out: &mut T, value: V) -> Result<usize> {
+    fn write_ascii_scalar<T: Write, V: Display>(&self, out: &mut T, value: V) -> PlyResult<usize> {
         let mut cw = CountingWrite::new(out);
         write!(&mut cw, "{}", value)?;
         Ok(cw.bytes)
     }
-    fn write_ascii_list<T: Write, D: Display>(&self, list: &[D], out: &mut T) -> Result<usize> {
+    fn write_ascii_list<T: Write, D: Display>(&self, list: &[D], out: &mut T) -> PlyResult<usize> {
         let mut cw = CountingWrite::new(out);
         write!(&mut cw, "{}", list.len())?;
         for v in list {
@@ -439,14 +447,14 @@ macro_rules! get_prop(
 impl<E: PropertyAccess> Writer<E> {
     // private payload
     /// Write a single binary formatted element in big endian.
-    pub fn write_big_endian_element<T: Write> (&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
+    pub fn write_big_endian_element<T: Write> (&self, out: &mut T, element: &E, element_def: &ElementDef) -> PlyResult<usize> {
         self.__write_binary_element::<T, BigEndian>(out, element, element_def)
     }
     /// Write a single binary formatted element in little endian.
-    pub fn write_little_endian_element<T: Write> (&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
+    pub fn write_little_endian_element<T: Write> (&self, out: &mut T, element: &E, element_def: &ElementDef) -> PlyResult<usize> {
         self.__write_binary_element::<T, LittleEndian>(out, element, element_def)
     }
-    fn __write_binary_element<T: Write, B: ByteOrder>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
+    fn __write_binary_element<T: Write, B: ByteOrder>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> PlyResult<usize> {
         let mut written = 0;
         for (k, property_def) in &element_def.properties {
             match property_def.data_type {
@@ -482,8 +490,8 @@ impl<E: PropertyAccess> Writer<E> {
                         ScalarType::UShort => {out.write_u16::<B>(vec_len as u16)?; 2},
                         ScalarType::Int => {out.write_i32::<B>(vec_len as i32)?; 4},
                         ScalarType::UInt => {out.write_u32::<B>(vec_len as u32)?; 4},
-                        ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in PropertyType.")),
-                        ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in PropertyType.")),
+                        ScalarType::Float => return Err(PlyError::Inconsistent("Index of list must be an integer type, float declared in PropertyType.".to_string())),
+                        ScalarType::Double => return Err(PlyError::Inconsistent("Index of list must be an integer type, double declared in PropertyType.".to_string())),
                     };
 
                     written += match *scalar_type {
@@ -501,7 +509,7 @@ impl<E: PropertyAccess> Writer<E> {
         };
         Ok(written)
     }
-    fn write_binary_list<T: Write, D>(&self, list: &[D], out: &mut T, out_val: &dyn Fn(&mut T, &D) -> Result<usize>) -> Result<usize> {
+    fn write_binary_list<T: Write, D>(&self, list: &[D], out: &mut T, out_val: &dyn Fn(&mut T, &D) -> PlyResult<usize>) -> PlyResult<usize> {
         let mut written = 0;
         for v in list {
             written += out_val(out, v)?;

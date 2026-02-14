@@ -38,6 +38,10 @@ pub use parser::FromPly;
 pub use writer::ToPly;
 
 mod util;
+/// Errors and Result types.
+pub mod errors;
+
+pub use errors::{PlyError, PlyResult};
 
 #[cfg(test)]
 doc_comment::doctest!("../README.md");

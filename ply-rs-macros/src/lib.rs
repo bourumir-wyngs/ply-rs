@@ -594,7 +594,7 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
     let ply_rs = get_crate_name();
     let expanded = quote! {
         impl #impl_generics #ply_rs::parser::FromPly for #name #ty_generics #where_clause {
-            fn read_ply<_T_READER: std::io::Read>(reader: &mut _T_READER) -> std::io::Result<Self> {
+            fn read_ply<_T_READER: std::io::Read>(reader: &mut _T_READER) -> #ply_rs::PlyResult<Self> {
                 struct IgnoredElement;
                 impl #ply_rs::ply::PropertyAccess for IgnoredElement {
                     fn new() -> Self { IgnoredElement }
@@ -872,7 +872,7 @@ pub fn derive_to_ply(input: TokenStream) -> TokenStream {
     let ply_rs = get_crate_name();
     let expanded = quote! {
         impl #impl_generics #ply_rs::writer::ToPly for #name #ty_generics #where_clause {
-            fn write_ply<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<usize> {
+            fn write_ply<W: std::io::Write>(&self, writer: &mut W) -> #ply_rs::PlyResult<usize> {
                 let mut header = #ply_rs::ply::Header::new();
                 header.encoding = #ply_rs::ply::Encoding::Ascii; // Defaulting to Ascii
                 

@@ -15,6 +15,8 @@ The crate has been renamed to `ply-rs-bw,` and minor issues were resolved to ens
 edition. Additionally, an example has been added to demonstrate how to read PLY files with diverse field types
 (e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). Semantic versioning is now adopted for consistent version management. The API compatibility badge checks for breaking changes relative to the current major version (`N.*.*`). 
 
+The reason we changed from 3.x to 4.x is that `ply_rs_bw::ply::PropertyType` and  `ply_rs_bw::ply::ScalarType` now implement `Copy` that semver checker considers the breaking change.
+
 ***
 
 Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. See [`examples/write_tetrahedron.rs`](examples/write_tetrahedron.rs) for a demonstration of writing binary PLY files.
@@ -26,7 +28,7 @@ It focuses on two main points:
 
 ## Getting started
 
-A PLY file consists of 3D points (vertices), which are defined separately, and faces that connect these vertices into triangles (or sometimes other polygons). Faces are typically short arrays of three indices that specify which vertices form a triangle From 3.1.0, it is possible to use macros, significantly reducing the necessary boilerplate: 
+A PLY file consists of 3D points (vertices), which are defined separately, and faces that connect these vertices into triangles (or sometimes other polygons). Faces are typically short arrays of three indices that specify which vertices form a triangle From 4.0.0 the crate is macro-centric. Macros significantly reduce the boilerplate: 
 
 ```rust
 use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};

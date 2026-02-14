@@ -5,7 +5,10 @@ use std::io::{ Read, BufReader };
 use std::fmt::Debug;
 use std::result;
 
-use std::io::{ BufRead, Result, ErrorKind };
+use std::io::{ BufRead, ErrorKind };
+use crate::errors::{PlyError, PlyResult};
+
+type Result<T> = PlyResult<T>;
 
 mod ply_grammar;
 
@@ -13,15 +16,13 @@ use self::ply_grammar::grammar;
 use self::ply_grammar::Line;
 use crate::util::LocationTracker;
 
-fn parse_ascii_rethrow<T, E: Debug>(location: &LocationTracker, line_str: &str, e: E, message: &str) -> Result<T> {
-    Err(io::Error::new(
-        ErrorKind::InvalidInput,
+fn parse_ascii_rethrow<T, E: Debug>(location: &LocationTracker, line_str: &str, e: E, message: &str) -> PlyResult<T> {
+    Err(PlyError::Parse(
         format!("Line {}: {}\n\tString: '{}'\n\tError: {:?}", location.line_index, message, line_str, e)
     ))
 }
-fn parse_ascii_error<T>(location: &LocationTracker, line_str: &str, message: &str) -> Result<T> {
-    Err(io::Error::new(
-        ErrorKind::InvalidInput,
+fn parse_ascii_error<T>(location: &LocationTracker, line_str: &str, message: &str) -> PlyResult<T> {
+    Err(PlyError::Parse(
         format!("Line {}: {}\n\tString: '{}'", location.line_index, message, line_str)
     ))
 }
@@ -94,6 +95,14 @@ use std::marker::PhantomData;
 pub struct Parser<E: PropertyAccess> {
       phantom: PhantomData<E>,
 }
+
+impl<E: PropertyAccess> Clone for Parser<E> {
+    fn clone(&self) -> Self {
+        Parser { phantom: PhantomData }
+    }
+}
+
+impl<E: PropertyAccess> Copy for Parser<E> {}
 
 impl<E: PropertyAccess> Default for Parser<E> {
     fn default() -> Self {
@@ -175,8 +184,7 @@ impl<E: PropertyAccess> Parser<E> {
     pub fn read_header_line(&self, line: &str) -> Result<Line> {
         match self.__read_header_line(line) {
             Ok(l) => Ok(l),
-            Err(e) => Err(io::Error::new(
-                ErrorKind::InvalidInput,
+            Err(e) => Err(PlyError::Parse(
                 format!("Couldn't parse line.\n\tString: {}\n\tError: {:?}", line, e)
             )),
         }
@@ -190,10 +198,10 @@ impl<E: PropertyAccess> Parser<E> {
         location.next_line();
         let mut line_str = String::new();
         if reader.read_line(&mut line_str)? == 0 {
-            return Err(io::Error::new(
+            return Err(PlyError::Io(io::Error::new(
                 ErrorKind::UnexpectedEof,
                 "Unexpected end of file while reading magic number.",
-            ));
+            )));
         }
         match self.__read_header_line(&line_str) {
             Ok(Line::MagicNumber) => (),
@@ -209,12 +217,11 @@ impl<E: PropertyAccess> Parser<E> {
         'readlines: loop {
             line_str.clear();
             if reader.read_line(&mut line_str)? == 0 {
-                return Err(io::Error::new(
-                    ErrorKind::UnexpectedEof,
+                return Err(PlyError::Parse(
                     format!(
                         "Line {}: Unexpected end of file while reading header (missing 'end_header').",
                         location.line_index
-                    ),
+                    )
                 ));
             }
             let line = self.__read_header_line(&line_str);
@@ -279,18 +286,16 @@ impl<E: PropertyAccess> Parser<E> {
         let (encoding, version) = if let Some((encoding, version)) = header_form_ver {
             (encoding, version)
         } else {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "No format line found.",
+            return Err(PlyError::Parse(
+                "No format line found.".to_string(),
             ));
         };
 
         let version = if let Some(version) = version {
             version
         } else {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "Invalid version number.",
+            return Err(PlyError::Parse(
+                "Invalid version number.".to_string(),
             ));
         };
 
@@ -373,7 +378,7 @@ impl<E: PropertyAccess> Parser<E> {
         for i in 0..element_def.count {
             line_str.clear();
             if reader.read_line(&mut line_str)? == 0 {
-                return Err(io::Error::new(
+                return Err(PlyError::Io(io::Error::new(
                     ErrorKind::UnexpectedEof,
                     format!(
                         "Line {}: Unexpected end of file while reading element '{}' (expected {}, got {}).",
@@ -382,7 +387,7 @@ impl<E: PropertyAccess> Parser<E> {
                         element_def.count,
                         i,
                     ),
-                ));
+                )));
             }
 
             let element = match self.read_ascii_element(&line_str, element_def) {
@@ -400,8 +405,7 @@ impl<E: PropertyAccess> Parser<E> {
     pub fn read_ascii_element(&self, line: &str, element_def: &ElementDef) -> Result<E> {
         let elems = match grammar::data_line(line) {
             Ok(e) => e,
-            Err(ref e) => return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
+            Err(ref e) => return Err(PlyError::Parse(
                     format!("Couldn't parse element line.\n\tString: '{}'\n\tError: {}", line, e)
                 )),
         };
@@ -416,8 +420,7 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_ascii_property(&self, elem_iter: &mut Iter<&str>, data_type: &PropertyType) -> Result<Property> {
         let s: &str = match elem_iter.next() {
-            None => return Err(io::Error::new(
-                ErrorKind::InvalidInput,
+            None => return Err(PlyError::Parse(
                 format!("Expected element of type '{:?}', but found nothing.", data_type)
             )),
             Some(x) => x,
@@ -456,7 +459,7 @@ impl<E: PropertyAccess> Parser<E> {
         let v = s.parse();
         match v {
             Ok(r) => Ok(r),
-            Err(e) => Err(io::Error::new(ErrorKind::InvalidInput,
+            Err(e) => Err(PlyError::Parse(
                 format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e))),
         }
     }
@@ -467,8 +470,7 @@ impl<E: PropertyAccess> Parser<E> {
             let s = match elem_iter.next() {
                 Some(s) => s,
                 None => {
-                    return Err(io::Error::new(
-                        ErrorKind::InvalidInput,
+                    return Err(PlyError::Parse(
                         format!("Expected {} list elements, but found only {}.", count, i),
                     ))
                 }
@@ -476,8 +478,7 @@ impl<E: PropertyAccess> Parser<E> {
             match s.parse() {
                 Ok(v) => out.push(v),
                 Err(err) => {
-                    return Err(io::Error::new(
-                        ErrorKind::InvalidInput,
+                    return Err(PlyError::Parse(
                         format!("Couldn't parse element at index {}: {:?}", i, err),
                     ));
                 }
@@ -535,8 +536,14 @@ impl<E: PropertyAccess> Parser<E> {
             let element = self
                 .__read_binary_element::<T, B>(reader, element_def)
                 .map_err(|e| {
-                    if e.kind() == ErrorKind::UnexpectedEof {
-                        io::Error::new(
+                    let is_eof = if let PlyError::Io(ref io_err) = e {
+                        io_err.kind() == ErrorKind::UnexpectedEof
+                    } else {
+                        false
+                    };
+
+                    if is_eof {
+                        PlyError::Io(io::Error::new(
                             ErrorKind::UnexpectedEof,
                             format!(
                                 "Line {}: Unexpected end of file while reading binary element '{}' (expected {}, got {}).\n\tError: {}",
@@ -546,7 +553,7 @@ impl<E: PropertyAccess> Parser<E> {
                                 i,
                                 e,
                             ),
-                        )
+                        ))
                     } else {
                         e
                     }
@@ -582,9 +589,8 @@ impl<E: PropertyAccess> Parser<E> {
                     ScalarType::Char => {
                         let v = reader.read_i8()?;
                         if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i8).",
+                            return Err(PlyError::Parse(
+                                "List length cannot be negative (i8).".to_string(),
                             ));
                         }
                         usize::try_from(v as i64).map_err(|_| {
@@ -595,9 +601,8 @@ impl<E: PropertyAccess> Parser<E> {
                     ScalarType::Short => {
                         let v = reader.read_i16::<B>()?;
                         if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i16).",
+                            return Err(PlyError::Parse(
+                                "List length cannot be negative (i16).".to_string(),
                             ));
                         }
                         usize::try_from(v as i64).map_err(|_| {
@@ -608,9 +613,8 @@ impl<E: PropertyAccess> Parser<E> {
                     ScalarType::Int => {
                         let v = reader.read_i32::<B>()?;
                         if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i32).",
+                            return Err(PlyError::Parse(
+                                "List length cannot be negative (i32).".to_string(),
                             ));
                         }
                         usize::try_from(v as i64).map_err(|_| {
@@ -620,18 +624,18 @@ impl<E: PropertyAccess> Parser<E> {
                     ScalarType::UInt => usize::try_from(reader.read_u32::<B>()?).map_err(|_| {
                         io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
                     })?,
-                    ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in ScalarType.")),
-                    ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in ScalarType.")),
+                    ScalarType::Float => return Err(PlyError::Parse("Index of list must be an integer type, float declared in ScalarType.".to_string())),
+                    ScalarType::Double => return Err(PlyError::Parse("Index of list must be an integer type, double declared in ScalarType.".to_string())),
                 };
                 match *property_type {
-                    ScalarType::Char => Property::ListChar(self.__read_binary_list(reader, &|r| r.read_i8(), count)?),
-                    ScalarType::UChar => Property::ListUChar(self.__read_binary_list(reader, &|r| r.read_u8(), count)?),
-                    ScalarType::Short => Property::ListShort(self.__read_binary_list(reader, &|r| r.read_i16::<B>(), count)?),
-                    ScalarType::UShort => Property::ListUShort(self.__read_binary_list(reader, &|r| r.read_u16::<B>(), count)?),
-                    ScalarType::Int => Property::ListInt(self.__read_binary_list(reader, &|r| r.read_i32::<B>(), count)?),
-                    ScalarType::UInt => Property::ListUInt(self.__read_binary_list(reader, &|r| r.read_u32::<B>(), count)?),
-                    ScalarType::Float => Property::ListFloat(self.__read_binary_list(reader, &|r| r.read_f32::<B>(), count)?),
-                    ScalarType::Double => Property::ListDouble(self.__read_binary_list(reader, &|r| r.read_f64::<B>(), count)?),
+                    ScalarType::Char => Property::ListChar(self.__read_binary_list(reader, &|r| r.read_i8().map_err(PlyError::Io), count)?),
+                    ScalarType::UChar => Property::ListUChar(self.__read_binary_list(reader, &|r| r.read_u8().map_err(PlyError::Io), count)?),
+                    ScalarType::Short => Property::ListShort(self.__read_binary_list(reader, &|r| r.read_i16::<B>().map_err(PlyError::Io), count)?),
+                    ScalarType::UShort => Property::ListUShort(self.__read_binary_list(reader, &|r| r.read_u16::<B>().map_err(PlyError::Io), count)?),
+                    ScalarType::Int => Property::ListInt(self.__read_binary_list(reader, &|r| r.read_i32::<B>().map_err(PlyError::Io), count)?),
+                    ScalarType::UInt => Property::ListUInt(self.__read_binary_list(reader, &|r| r.read_u32::<B>().map_err(PlyError::Io), count)?),
+                    ScalarType::Float => Property::ListFloat(self.__read_binary_list(reader, &|r| r.read_f32::<B>().map_err(PlyError::Io), count)?),
+                    ScalarType::Double => Property::ListDouble(self.__read_binary_list(reader, &|r| r.read_f64::<B>().map_err(PlyError::Io), count)?),
                 }
             }
         };
@@ -642,8 +646,7 @@ impl<E: PropertyAccess> Parser<E> {
         let mut list = Vec::<D>::with_capacity(count);
         for i in 0..count {
             let value : D = match read_from(reader) {
-                Err(e) => return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
+                Err(e) => return Err(PlyError::Parse(
                     format!("Couldn't find a list element at index {}.\n\tError: {:?}", i, e)
                 )),
                 Ok(x) => x
