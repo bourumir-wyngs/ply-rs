@@ -122,8 +122,7 @@ fn parse_ply_name(field: &syn::Field) -> Result<String, syn::Error> {
 
 /// Procedural macro to derive the `PropertyAccess` trait.
 ///
-/// This macro generates the `set_property` method and various `get_*` methods, 
-/// which map PLY property names to struct fields and handle type conversions.
+/// This macro generates the `new`, `set_property` and `get_*` methods.
 ///
 /// Supported attributes:
 /// - `#[ply(name = "property_name")]`: Maps the field to a specific PLY property name.
@@ -148,6 +147,26 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
     let mut set_arms = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
     let ply_rs = get_crate_name();
+
+    // Getters
+    let mut get_char_arms = Vec::new();
+    let mut get_uchar_arms = Vec::new();
+    let mut get_short_arms = Vec::new();
+    let mut get_ushort_arms = Vec::new();
+    let mut get_int_arms = Vec::new();
+    let mut get_uint_arms = Vec::new();
+    let mut get_float_arms = Vec::new();
+    let mut get_double_arms = Vec::new();
+
+    // List getters
+    let mut get_list_char_arms = Vec::new();
+    let mut get_list_uchar_arms = Vec::new();
+    let mut get_list_short_arms = Vec::new();
+    let mut get_list_ushort_arms = Vec::new();
+    let mut get_list_int_arms = Vec::new();
+    let mut get_list_uint_arms = Vec::new();
+    let mut get_list_float_arms = Vec::new();
+    let mut get_list_double_arms = Vec::new();
 
     for field in fields {
         let field_name = &field.ident;
@@ -221,6 +240,85 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
             }
         };
         set_arms.push(arm);
+
+        // Getter logic
+        let effective_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
+            let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
+                match s {
+                    "char" | "i8" => Some(ScalarKind::I8),
+                    "uchar" | "u8" => Some(ScalarKind::U8),
+                    "short" | "i16" => Some(ScalarKind::I16),
+                    "ushort" | "u16" => Some(ScalarKind::U16),
+                    "int" | "i32" => Some(ScalarKind::I32),
+                    "uint" | "u32" => Some(ScalarKind::U32),
+                    "float" | "f32" => Some(ScalarKind::F32),
+                    "double" | "f64" => Some(ScalarKind::F64),
+                    _ => None,
+                }
+            };
+            scalar_type_from_str_kind(et)
+        } else {
+            scalar_ident(conversion_type)
+        };
+
+        if let Some(inner_vec_type) = is_vec(conversion_type) {
+             // List type
+             let inner_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
+                let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
+                    match s {
+                        "char" | "i8" => Some(ScalarKind::I8),
+                        "uchar" | "u8" => Some(ScalarKind::U8),
+                        "short" | "i16" => Some(ScalarKind::I16),
+                        "ushort" | "u16" => Some(ScalarKind::U16),
+                        "int" | "i32" => Some(ScalarKind::I32),
+                        "uint" | "u32" => Some(ScalarKind::U32),
+                        "float" | "f32" => Some(ScalarKind::F32),
+                        "double" | "f64" => Some(ScalarKind::F64),
+                        _ => None,
+                    }
+                };
+                scalar_type_from_str_kind(et)
+             } else {
+                scalar_ident(inner_vec_type)
+             };
+
+             if let Some(kind) = inner_kind {
+                 use ScalarKind::*;
+                 let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
+                 let field_access_list = if is_opt.is_some() {
+                      quote! { self.#field_name.as_deref().map(|v| v as &[#cast_ty]) }
+                 } else {
+                      quote! { Some(self.#field_name.as_slice() as &[#cast_ty]) }
+                 };
+                 let arm = quote! { key if key == #ply_name_lit => #field_access_list, };
+                 match kind {
+                    I8 => get_list_char_arms.push(arm),
+                    U8 => get_list_uchar_arms.push(arm),
+                    I16 => get_list_short_arms.push(arm),
+                    U16 => get_list_ushort_arms.push(arm),
+                    I32 => get_list_int_arms.push(arm),
+                    U32 => get_list_uint_arms.push(arm),
+                    F32 => get_list_float_arms.push(arm),
+                    F64 => get_list_double_arms.push(arm),
+                 }
+             }
+        } else if let Some(kind) = effective_kind {
+             // Scalar type
+             use ScalarKind::*;
+             let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
+             let field_access_scalar = quote! { #ply_rs::ply::GetProperty::<#cast_ty>::get(&self.#field_name) };
+             let arm = quote! { key if key == #ply_name_lit => #field_access_scalar, };
+             match kind {
+                I8 => get_char_arms.push(arm),
+                U8 => get_uchar_arms.push(arm),
+                I16 => get_short_arms.push(arm),
+                U16 => get_ushort_arms.push(arm),
+                I32 => get_int_arms.push(arm),
+                U32 => get_uint_arms.push(arm),
+                F32 => get_float_arms.push(arm),
+                F64 => get_double_arms.push(arm),
+             }
+        }
     }
 
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -237,6 +335,24 @@ pub fn derive_property_access(input: TokenStream) -> TokenStream {
                     _ => {},
                 }
             }
+
+            fn get_char(&self, key: &str) -> Option<i8> { match key { #( #get_char_arms )* _ => None } }
+            fn get_uchar(&self, key: &str) -> Option<u8> { match key { #( #get_uchar_arms )* _ => None } }
+            fn get_short(&self, key: &str) -> Option<i16> { match key { #( #get_short_arms )* _ => None } }
+            fn get_ushort(&self, key: &str) -> Option<u16> { match key { #( #get_ushort_arms )* _ => None } }
+            fn get_int(&self, key: &str) -> Option<i32> { match key { #( #get_int_arms )* _ => None } }
+            fn get_uint(&self, key: &str) -> Option<u32> { match key { #( #get_uint_arms )* _ => None } }
+            fn get_float(&self, key: &str) -> Option<f32> { match key { #( #get_float_arms )* _ => None } }
+            fn get_double(&self, key: &str) -> Option<f64> { match key { #( #get_double_arms )* _ => None } }
+            
+            fn get_list_char(&self, key: &str) -> Option<&[i8]> { match key { #( #get_list_char_arms )* _ => None } }
+            fn get_list_uchar(&self, key: &str) -> Option<&[u8]> { match key { #( #get_list_uchar_arms )* _ => None } }
+            fn get_list_short(&self, key: &str) -> Option<&[i16]> { match key { #( #get_list_short_arms )* _ => None } }
+            fn get_list_ushort(&self, key: &str) -> Option<&[u16]> { match key { #( #get_list_ushort_arms )* _ => None } }
+            fn get_list_int(&self, key: &str) -> Option<&[i32]> { match key { #( #get_list_int_arms )* _ => None } }
+            fn get_list_uint(&self, key: &str) -> Option<&[u32]> { match key { #( #get_list_uint_arms )* _ => None } }
+            fn get_list_float(&self, key: &str) -> Option<&[f32]> { match key { #( #get_list_float_arms )* _ => None } }
+            fn get_list_double(&self, key: &str) -> Option<&[f64]> { match key { #( #get_list_double_arms )* _ => None } }
         }
     };
 
@@ -582,6 +698,10 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
         }
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
+
+        if ply_attr.count_type.is_some() && is_vec(field_type).is_none() {
+             return TokenStream::from(syn::Error::new_spanned(field, "ply parameter 'count' is only valid for Vec<T> fields").to_compile_error());
+        }
 
         if is_option(field_type).is_some() {
              return TokenStream::from(syn::Error::new_spanned(field_type, "optional properties are only supported by the reader. PlyWrite does not support Option<T>.").to_compile_error());
