@@ -12,11 +12,11 @@
 This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was initially created to address the use of `linked-hash-map` to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). After first making minor tweaks and adding examples, we currently made more major extensions by proposing to use macros for working with ply data structures.
 ***
 
-Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. See [`examples/write_with_macro.rs`](examples/write_with_macro.rs) (new API) and [`examples/write_tetrahedron.rs`](examples/write_tetrahedron.rs) for a demonstration of writing binary PLY files.
+Ply-rs is a small library built to read and write the PLY file format (also Polygon File Format, Stanford Triangle Format). The library supports all three subformats for both reading and writing: ASCII, binary big endian, and binary little endian. 
 
 It focuses on two main points:
 
-- An easy and fast start.
+- An easy and fast start (now emphasized).
 - High performance if you're willing to do some things yourself.
 
 ## Getting started
@@ -82,10 +82,10 @@ fn test_write_read_tetrahedron_macros() {
 }
 ```
 ## Data types
-Standard PLY data types are: char (i8), uchar (u8), short (i16), ushort (u16), int (i32), uint (u32), float (f32), double (f64). Types like u64, i64, u128, and i128 that this library supports are not part of the official standard and are considered extensions in some implementations.  
+Standard PLY data types are: `char (i8), uchar (u8), short (i16), ushort (u16), int (i32), uint (u32), float (f32), double (f64)`. Types like `u64, i64, u128`, and `i128` that this library supports are not part of the official standard and are considered extensions in some implementations.  
 
-For more complicated examples, please see the [examples](examples/). Example [examples/colors_normals_cameras.rs](examples/colors_normals_cameras.rs) shows how to define read/write data beyond vertices and faces.
+Example [colors_normals_cameras.rs](examples/colors_normals_cameras.rs) shows how to define read/write data beyond vertices and faces.
 
-The old 3.x.x API is not removed and remains available if preferred. See [examples/write_tetrahedron.rs]() and [examples/write_tetrahedron.rs](examples/read_diverse_field_types.rs) for demonstrations how to use it. 
+The old 3.x.x API is not removed and remains available if preferred. See [write_tetrahedron.rs](examples/write_tetrahedron.rs) and [read_diverse_field_types.rs](examples/read_diverse_field_types.rs) for how to use it. 
 
 This implementation is mainly based on [these specifications](http://paulbourke.net/dataformats/ply/) with additions from [here](https://people.sc.fsu.edu/%7Ejburkardt/data/ply/ply.txt).
