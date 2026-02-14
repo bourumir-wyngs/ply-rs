@@ -28,63 +28,56 @@ It focuses on two main points:
 
 ## Getting started
 
-A PLY file consists of 3D points (vertices), which are defined separately, and faces that connect these vertices into triangles (or sometimes other polygons). Faces are typically short arrays of three indices that specify which vertices form a triangle From 4.0.0 the crate is macro-centric. Macros significantly reduce the boilerplate: 
+A PLY file consists of 3D points (vertices), which are defined separately, and faces that connect these vertices into triangles (or sometimes other polygons). Faces are typically short arrays of three indices that specify which vertices form a triangle.
+
+From version 4.0.0, `ply-rs-bw` supports `serde`. This means you can use standard `#[derive(Serialize, Deserialize)]` on your structs to read and write PLY files, significantly reducing boilerplate. Data types are inferred for Rust types.
 
 ```rust
-use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
+use serde::{Deserialize, Serialize};
+use ply_rs_bw::{from_reader, to_writer};
 
-#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Vertex {
-    // we use maximal abstraction (ply types and names are inferred).
     x: f32,
     y: f32,
     z: f32,
 }
 
-#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Face {
-    // we use maximum details
-    #[ply(name = "vertex_indices", type = "uint", count = "uchar")]
-    indices: Vec<u32>,
+    #[serde(rename = "vertex_indices")]
+    indices: Vec<i32>,
 }
 
-#[derive(Debug, ToPly, FromPly, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Mesh {
-    #[ply(name = "vertex")]
+    // Maps to "element vertex"
+    #[serde(rename = "vertex")]
     vertices: Vec<Vertex>,
-    #[ply(name = "face")]
+    // Maps to "element face"
+    #[serde(rename = "face")]
     faces: Vec<Face>,
 }
 
 #[test]
-#[cfg(not(miri))]
-fn test_write_read_tetrahedron_macros() {
-    // Create mesh
+fn test_serde_ply() {
     let vertices = vec![
-        Vertex { x: 1.0, y: 1.0, z: 1.0 },
-        Vertex { x: 1.0, y: -1.0, z: -1.0 },
-        Vertex { x: -1.0, y: 1.0, z: -1.0 },
-        Vertex { x: -1.0, y: -1.0, z: 1.0 },
+        Vertex { x: 0.0, y: 0.0, z: 0.0 },
+        Vertex { x: 1.0, y: 0.0, z: 0.0 },
+        Vertex { x: 0.0, y: 1.0, z: 0.0 },
     ];
-
     let faces = vec![
         Face { indices: vec![0, 1, 2] },
-        Face { indices: vec![0, 3, 1] },
-        Face { indices: vec![0, 2, 3] },
-        Face { indices: vec![1, 3, 2] },
     ];
-
     let mesh = Mesh { vertices, faces };
 
-    // Write
-    let mut buf = Vec::<u8>::new();
-    mesh.write_ply(&mut buf).unwrap();
+    // Write to a buffer (or file)
+    let mut buf = Vec::new();
+    to_writer(&mut buf, &mesh).unwrap();
 
     // Read back
-    let mut cursor = std::io::Cursor::new(buf);
-    let read_mesh = Mesh::read_ply(&mut cursor).unwrap();
-
-    // Assert
+    let read_mesh: Mesh = from_reader(&buf[..]).unwrap();
+    
     assert_eq!(mesh, read_mesh);
 }
 ```

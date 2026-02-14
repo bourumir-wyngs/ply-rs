@@ -40,8 +40,10 @@ pub use writer::ToPly;
 mod util;
 /// Errors and Result types.
 pub mod errors;
+mod serde_impl;
 
 pub use errors::{PlyError, PlyResult};
+pub use serde_impl::{from_reader, to_writer};
 
 #[cfg(test)]
 doc_comment::doctest!("../README.md");
