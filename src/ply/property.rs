@@ -205,7 +205,7 @@ pub enum Requiredness {
 /// in the PLY header before attempting to read the payload.
 ///
 /// Optional properties (using `Option<T>`) are allowed when reading.
-pub trait PropertySchema {
+pub trait ReadSchema {
     /// Returns a list of properties (name and requiredness) expected by this type.
     fn schema() -> Vec<(String, Requiredness)>;
 }
@@ -215,7 +215,7 @@ pub trait PropertySchema {
 /// Note: Optional properties (`Option<T>`) are NOT supported for writing
 /// because the PLY format requires every element instance to have a value
 /// for every property declared in the header.
-pub trait PropertyTypeSchema {
+pub trait WriteSchema {
     /// Returns a list of properties (name and type) expected by this type.
     fn property_type_schema() -> Vec<(String, PropertyType)>;
 }
@@ -257,9 +257,9 @@ impl<T: Copy> GetProperty<T> for Option<T> {
 }
 
 /// Allows a type to be automatically parsed from a PLY element.
-pub trait PlyRead: PropertyAccess + PropertySchema {}
-impl<T: PropertyAccess + PropertySchema> PlyRead for T {}
+pub trait PlyRead: PropertyAccess + ReadSchema {}
+impl<T: PropertyAccess + ReadSchema> PlyRead for T {}
 
 /// Allows a type to be automatically written to a PLY element.
-pub trait PlyWrite: PropertyTypeSchema {}
-impl<T: PropertyTypeSchema> PlyWrite for T {}
+pub trait PlyWrite: WriteSchema {}
+impl<T: WriteSchema> PlyWrite for T {}

@@ -1,4 +1,4 @@
-use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly, PropertyAccess as PropertyAccessDerive, PropertySchema};
+use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 use ply_rs_bw::ply::{Property, PropertyAccess};
 
 #[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
@@ -112,7 +112,7 @@ fn test_all_lists_conversion() {
     assert_eq!(l.li, vec![1, 2]);
 }
 
-#[derive(Debug, Default, PropertyAccessDerive, PropertySchema, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, Clone, PartialEq)]
 struct OptionalFields {
     #[ply(name = "x")]
     x: f32,
@@ -252,7 +252,7 @@ fn test_simple_mesh_roundtrip() {
     assert_eq!(mesh, read_mesh);
 }
 
-#[derive(Debug, Default, PropertyAccessDerive, PropertySchema, Clone, PartialEq)]
+#[derive(Debug, Default, PlyRead, Clone, PartialEq)]
 struct ListWithExplicitTypePA {
     #[ply(name = "indices", type = "uint")]
     indices: Vec<u32>,
