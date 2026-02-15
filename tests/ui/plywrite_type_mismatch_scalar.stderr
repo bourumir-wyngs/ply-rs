@@ -1,4 +1,4 @@
-error: ply(type="float") does not match the field type (expected uint for u32)
+error: ply(type="float") is incompatible with field type u32
  --> tests/ui/plywrite_type_mismatch_scalar.rs:5:5
   |
 5 | /     #[ply(type = "float")]

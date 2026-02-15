@@ -540,33 +540,6 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
     let mut seen_names = std::collections::HashSet::new();
     let ply_rs = get_crate_name();
 
-    let scalar_category_from_str = |s: &str| -> Option<&'static str> {
-        match s {
-            "char" | "i8" => Some("char"),
-            "uchar" | "u8" => Some("uchar"),
-            "short" | "i16" => Some("short"),
-            "ushort" | "u16" => Some("ushort"),
-            "int" | "i32" => Some("int"),
-            "uint" | "u32" => Some("uint"),
-            "float" | "f32" => Some("float"),
-            "double" | "f64" => Some("double"),
-            _ => None,
-        }
-    };
-
-    let scalar_category_from_kind = |k: &ScalarKind| -> &'static str {
-        use ScalarKind::*;
-        match k {
-            I8 => "char",
-            U8 => "uchar",
-            I16 => "short",
-            U16 => "ushort",
-            I32 | I64 | I128 => "int",
-            U32 | U64 | U128 => "uint",
-            F32 => "float",
-            F64 => "double",
-        }
-    };
 
     for field in fields {
         let field_type = &field.ty;
@@ -599,32 +572,30 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
         // then an explicit `#[ply(type = "...")]` must be compatible with what the derived
         // accessors can provide.
         if let Some(et) = ply_attr.explicit_type.as_deref() {
-            if let Some(explicit_cat) = scalar_category_from_str(et) {
+            if let Some(explicit_kind) = scalar_kind_from_str_for_ply_read(et) {
                 if let Some(inner) = is_vec(field_type) {
-                    if let Some(kind) = scalar_ident(inner) {
-                        let expected_cat = scalar_category_from_kind(&kind);
-                        if explicit_cat != expected_cat {
+                    if let Some(field_kind) = scalar_ident(inner) {
+                        if !ply_read_explicit_type_compatible(&explicit_kind, &field_kind) {
                             return TokenStream::from(
                                 syn::Error::new_spanned(
                                     field,
                                     format!(
-                                        "ply(type=\"{}\") does not match the field type (expected {} for Vec<{}>)",
-                                        et, expected_cat, kind
+                                        "ply(type=\"{}\") is incompatible with field type Vec<{}>",
+                                        et, field_kind
                                     ),
                                 )
                                 .to_compile_error(),
                             );
                         }
                     }
-                } else if let Some(kind) = scalar_ident(field_type) {
-                    let expected_cat = scalar_category_from_kind(&kind);
-                    if explicit_cat != expected_cat {
+                } else if let Some(field_kind) = scalar_ident(field_type) {
+                    if !ply_read_explicit_type_compatible(&explicit_kind, &field_kind) {
                         return TokenStream::from(
                             syn::Error::new_spanned(
                                 field,
                                 format!(
-                                    "ply(type=\"{}\") does not match the field type (expected {} for {})",
-                                    et, expected_cat, kind
+                                    "ply(type=\"{}\") is incompatible with field type {}",
+                                    et, field_kind
                                 ),
                             )
                             .to_compile_error(),
