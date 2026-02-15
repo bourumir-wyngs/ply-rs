@@ -188,10 +188,6 @@ pub trait PropertyAccess {
     }
 }
 
-// NOTE: Previous versions exposed schema traits (`ReadSchema`/`WriteSchema`) and a
-// `Requiredness` enum. These were removed because they were not used by the runtime
-// parser/writer and could not accurately represent alias groups.
-
 /// Trait that describes the schema of a property including its type.
 ///
 /// This is used by macro-based writing (`#[derive(ToPly)]`) to construct element/property

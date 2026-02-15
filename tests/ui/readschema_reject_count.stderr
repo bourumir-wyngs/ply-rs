@@ -1,5 +1,0 @@
-error: cannot find derive macro `ReadSchema` in this scope
- --> tests/ui/readschema_reject_count.rs:1:10
-  |
-1 | #[derive(ReadSchema)]
-  |          ^^^^^^^^^^
