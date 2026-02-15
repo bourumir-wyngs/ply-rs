@@ -9,8 +9,7 @@
 /// Scalar type used to encode properties in the payload.
 ///
 /// For the translation to rust types, see individual documentation.
-#[allow(missing_copy_implementations)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ScalarType {
     /// Signed 8 bit integer, rust: `i8`.
     Char,
@@ -34,8 +33,7 @@ pub enum ScalarType {
 ///
 /// There are two possible types: scalars and lists.
 /// Lists are a sequence of scalars with a leading integer value defining how many elements the list contains.
-#[allow(missing_copy_implementations)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PropertyType {
     /// Simple, "one-number" type.
     Scalar(ScalarType),
@@ -189,3 +187,77 @@ pub trait PropertyAccess {
         None
     }
 }
+
+/// Defines whether a property is required or optional.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Requiredness {
+    /// The property must be present in the header.
+    Required,
+    /// The property may be missing from the header.
+    Optional,
+}
+
+/// Provides a schema for the properties expected by a data structure.
+///
+/// This is used by the parser to validate that all required properties are present
+/// in the PLY header before attempting to read the payload.
+///
+/// Optional properties (using `Option<T>`) are allowed when reading.
+pub trait ReadSchema {
+    /// Returns a list of properties (name and requiredness) expected by this type.
+    fn schema() -> Vec<(String, Requiredness)>;
+}
+
+/// Trait that describes the schema of a property including its type.
+///
+/// Note: Optional properties (`Option<T>`) are NOT supported for writing
+/// because the PLY format requires every element instance to have a value
+/// for every property declared in the header.
+pub trait WriteSchema {
+    /// Returns a list of properties (name and type) expected by this type.
+    fn property_type_schema() -> Vec<(String, PropertyType)>;
+}
+
+/// Helper trait to safely set a value into a field, possibly with conversion.
+pub trait SetProperty<T> {
+    /// Sets the value.
+    fn set(&mut self, val: T);
+}
+
+impl<T> SetProperty<T> for T {
+    fn set(&mut self, val: T) {
+        *self = val;
+    }
+}
+
+impl<T> SetProperty<T> for Option<T> {
+    fn set(&mut self, val: T) {
+        *self = Some(val);
+    }
+}
+
+/// Helper trait to safely get a value from a field, possibly with conversion.
+pub trait GetProperty<T> {
+    /// Gets the value.
+    fn get(&self) -> Option<T>;
+}
+
+impl<T: Copy> GetProperty<T> for T {
+    fn get(&self) -> Option<T> {
+        Some(*self)
+    }
+}
+
+impl<T: Copy> GetProperty<T> for Option<T> {
+    fn get(&self) -> Option<T> {
+        *self
+    }
+}
+
+/// Allows a type to be automatically parsed from a PLY element.
+pub trait PlyRead: PropertyAccess + ReadSchema {}
+impl<T: PropertyAccess + ReadSchema> PlyRead for T {}
+
+/// Allows a type to be automatically written to a PLY element.
+pub trait PlyWrite: WriteSchema {}
+impl<T: WriteSchema> PlyWrite for T {}
