@@ -50,7 +50,6 @@ struct Mesh {
 }
 
 #[test]
-#[cfg(not(miri))]
 fn test_write_read_tetrahedron_macros() {
     // Create mesh
     let vertices = vec![
