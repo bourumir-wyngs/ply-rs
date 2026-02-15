@@ -817,8 +817,8 @@ fn scalar_ident(ty: &Type) -> Option<ScalarKind> {
                 "u32" => Some(ScalarKind::U32),
                 "f32" => Some(ScalarKind::F32),
                 "f64" => Some(ScalarKind::F64),
-                "i64" | "isize" => Some(ScalarKind::I64),
-                "u64" | "usize" => Some(ScalarKind::U64),
+                "i64" => Some(ScalarKind::I64),
+                "u64" => Some(ScalarKind::U64),
                 "i128" => Some(ScalarKind::I128),
                 "u128" => Some(ScalarKind::U128),
 

@@ -1,0 +1,5 @@
+error: Unsupported field type for PlyAccess. Supported types: i8, u8, i16, u16, i32, u32, f32, f64, and Vec<T> of these.
+ --> tests/ui/plyread_reject_usize.rs:5:10
+  |
+5 |     foo: usize,
+  |          ^^^^^
