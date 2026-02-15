@@ -6,6 +6,8 @@
 //! - [`ScalarType`] / [`PropertyType`] to describe the types declared in the header.
 //! - [`PropertyAccess`] to allow parsing/writing payloads into custom data structures.
 
+use std::borrow::Cow;
+
 /// Scalar type used to encode properties in the payload.
 ///
 /// For the translation to rust types, see individual documentation.
@@ -148,42 +150,42 @@ pub trait PropertyAccess {
     }
 
     /// Returns the property value as a list of signed 8-bit integers.
-    fn get_list_char(&self, _property_name: &str) -> Option<&[i8]> {
+    fn get_list_char(&self, _property_name: &str) -> Option<Cow<'_, [i8]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 8-bit integers.
-    fn get_list_uchar(&self, _property_name: &str) -> Option<&[u8]> {
+    fn get_list_uchar(&self, _property_name: &str) -> Option<Cow<'_, [u8]>> {
         None
     }
 
     /// Returns the property value as a list of signed 16-bit integers.
-    fn get_list_short(&self, _property_name: &str) -> Option<&[i16]> {
+    fn get_list_short(&self, _property_name: &str) -> Option<Cow<'_, [i16]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 16-bit integers.
-    fn get_list_ushort(&self, _property_name: &str) -> Option<&[u16]> {
+    fn get_list_ushort(&self, _property_name: &str) -> Option<Cow<'_, [u16]>> {
         None
     }
 
     /// Returns the property value as a list of signed 32-bit integers.
-    fn get_list_int(&self, _property_name: &str) -> Option<&[i32]> {
+    fn get_list_int(&self, _property_name: &str) -> Option<Cow<'_, [i32]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 32-bit integers.
-    fn get_list_uint(&self, _property_name: &str) -> Option<&[u32]> {
+    fn get_list_uint(&self, _property_name: &str) -> Option<Cow<'_, [u32]>> {
         None
     }
 
     /// Returns the property value as a list of 32-bit floating point numbers.
-    fn get_list_float(&self, _property_name: &str) -> Option<&[f32]> {
+    fn get_list_float(&self, _property_name: &str) -> Option<Cow<'_, [f32]>> {
         None
     }
 
     /// Returns the property value as a list of 64-bit floating point numbers.
-    fn get_list_double(&self, _property_name: &str) -> Option<&[f64]> {
+    fn get_list_double(&self, _property_name: &str) -> Option<Cow<'_, [f64]>> {
         None
     }
 }

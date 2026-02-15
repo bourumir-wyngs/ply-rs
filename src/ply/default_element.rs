@@ -6,6 +6,7 @@
 use super::KeyMap;
 use super::Property;
 use super::PropertyAccess;
+use std::borrow::Cow;
 
 /// Ready to use data-structure for all kind of element definitions.
 ///
@@ -75,51 +76,51 @@ impl PropertyAccess for DefaultElement {
             _ => None,
         }
     }
-    fn get_list_char(&self, key: &str) -> Option<&[i8]> {
+    fn get_list_char(&self, key: &str) -> Option<Cow<'_, [i8]>> {
         match *get!(self.get(key)) {
-            Property::ListChar(ref x) => Some(x),
+            Property::ListChar(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_uchar(&self, key: &str) -> Option<&[u8]> {
+    fn get_list_uchar(&self, key: &str) -> Option<Cow<'_, [u8]>> {
         match *get!(self.get(key)) {
-            Property::ListUChar(ref x) => Some(x),
+            Property::ListUChar(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_short(&self, key: &str) -> Option<&[i16]> {
+    fn get_list_short(&self, key: &str) -> Option<Cow<'_, [i16]>> {
         match *get!(self.get(key)) {
-            Property::ListShort(ref x) => Some(x),
+            Property::ListShort(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_ushort(&self, key: &str) -> Option<&[u16]> {
+    fn get_list_ushort(&self, key: &str) -> Option<Cow<'_, [u16]>> {
         match *get!(self.get(key)) {
-            Property::ListUShort(ref x) => Some(x),
+            Property::ListUShort(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_int(&self, key: &str) -> Option<&[i32]> {
+    fn get_list_int(&self, key: &str) -> Option<Cow<'_, [i32]>> {
         match *get!(self.get(key)) {
-            Property::ListInt(ref x) => Some(x),
+            Property::ListInt(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_uint(&self, key: &str) -> Option<&[u32]> {
+    fn get_list_uint(&self, key: &str) -> Option<Cow<'_, [u32]>> {
         match *get!(self.get(key)) {
-            Property::ListUInt(ref x) => Some(x),
+            Property::ListUInt(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_float(&self, key: &str) -> Option<&[f32]> {
+    fn get_list_float(&self, key: &str) -> Option<Cow<'_, [f32]>> {
         match *get!(self.get(key)) {
-            Property::ListFloat(ref x) => Some(x),
+            Property::ListFloat(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }
-    fn get_list_double(&self, key: &str) -> Option<&[f64]> {
+    fn get_list_double(&self, key: &str) -> Option<Cow<'_, [f64]>> {
         match *get!(self.get(key)) {
-            Property::ListDouble(ref x) => Some(x),
+            Property::ListDouble(ref x) => Some(Cow::Borrowed(x)),
             _ => None,
         }
     }

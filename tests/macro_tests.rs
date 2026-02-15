@@ -1,5 +1,6 @@
 use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 use ply_rs_bw::ply::{Property, PropertyAccess};
+use std::borrow::Cow;
 
 #[derive(Debug, Default, PlyRead, PlyWrite, Clone, PartialEq)]
 struct AllScalars {
@@ -161,14 +162,14 @@ fn test_list_getters() {
         lc: vec![1], luc: vec![2], ls: vec![3], lus: vec![4],
         li: vec![5], lui: vec![6], lf: vec![7.0], ld: vec![8.0],
     };
-    assert_eq!(l.get_list_char("list_char"), Some([1i8].as_slice()));
-    assert_eq!(l.get_list_uchar("list_uchar"), Some([2u8].as_slice()));
-    assert_eq!(l.get_list_short("list_short"), Some([3i16].as_slice()));
-    assert_eq!(l.get_list_ushort("list_ushort"), Some([4u16].as_slice()));
-    assert_eq!(l.get_list_int("list_int"), Some([5i32].as_slice()));
-    assert_eq!(l.get_list_uint("list_uint"), Some([6u32].as_slice()));
-    assert_eq!(l.get_list_float("list_float"), Some([7.0f32].as_slice()));
-    assert_eq!(l.get_list_double("list_double"), Some([8.0f64].as_slice()));
+    assert_eq!(l.get_list_char("list_char"), Some(Cow::Borrowed([1i8].as_slice())));
+    assert_eq!(l.get_list_uchar("list_uchar"), Some(Cow::Borrowed([2u8].as_slice())));
+    assert_eq!(l.get_list_short("list_short"), Some(Cow::Borrowed([3i16].as_slice())));
+    assert_eq!(l.get_list_ushort("list_ushort"), Some(Cow::Borrowed([4u16].as_slice())));
+    assert_eq!(l.get_list_int("list_int"), Some(Cow::Borrowed([5i32].as_slice())));
+    assert_eq!(l.get_list_uint("list_uint"), Some(Cow::Borrowed([6u32].as_slice())));
+    assert_eq!(l.get_list_float("list_float"), Some(Cow::Borrowed([7.0f32].as_slice())));
+    assert_eq!(l.get_list_double("list_double"), Some(Cow::Borrowed([8.0f64].as_slice())));
     assert_eq!(l.get_list_float("non_existent"), None);
 }
 

@@ -391,20 +391,32 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
              };
 
              if let Some(kind) = inner_kind {
-                 // List getters return borrowed slices of concrete scalar types.
-                 // If the Rust field uses a different (even if wider) element type, we can't
-                 // safely provide `&[i32]`/`&[u32]`/etc without allocating/converting, so we
-                 // simply omit the getter arm in that case.
-                 if explicit_kind.is_some() && scalar_ident(inner_vec_type).as_ref() != Some(&kind) {
-                     continue;
-                 }
 
                  use ScalarKind::*;
                  let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
-                 let field_access_list = if is_opt.is_some() {
-                      quote! { self.#field_name.as_deref().map(|v| v as &[#cast_ty]) }
+
+                 let need_conversion = scalar_ident(inner_vec_type).as_ref() != Some(&kind);
+
+                 let field_access_list = if need_conversion {
+                      if is_opt.is_some() {
+                          quote! {
+                              self.#field_name.as_ref().map(|v| ::std::borrow::Cow::Owned(
+                                  v.iter().map(|x| *x as #cast_ty).collect()
+                              ))
+                          }
+                      } else {
+                          quote! {
+                              Some(::std::borrow::Cow::Owned(
+                                  self.#field_name.iter().map(|x| *x as #cast_ty).collect()
+                              ))
+                          }
+                      }
                  } else {
-                      quote! { Some(self.#field_name.as_slice() as &[#cast_ty]) }
+                      if is_opt.is_some() {
+                           quote! { self.#field_name.as_deref().map(|v| ::std::borrow::Cow::Borrowed(v as &[#cast_ty])) }
+                      } else {
+                           quote! { Some(::std::borrow::Cow::Borrowed(self.#field_name.as_slice() as &[#cast_ty])) }
+                      }
                  };
                  let arm = quote! { #( #ply_name_lits )|* => #field_access_list, };
                  match kind {
@@ -502,14 +514,14 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             fn get_float(&self, key: &str) -> Option<f32> { match key { #( #get_float_arms )* _ => None } }
             fn get_double(&self, key: &str) -> Option<f64> { match key { #( #get_double_arms )* _ => None } }
             
-            fn get_list_char(&self, key: &str) -> Option<&[i8]> { match key { #( #get_list_char_arms )* _ => None } }
-            fn get_list_uchar(&self, key: &str) -> Option<&[u8]> { match key { #( #get_list_uchar_arms )* _ => None } }
-            fn get_list_short(&self, key: &str) -> Option<&[i16]> { match key { #( #get_list_short_arms )* _ => None } }
-            fn get_list_ushort(&self, key: &str) -> Option<&[u16]> { match key { #( #get_list_ushort_arms )* _ => None } }
-            fn get_list_int(&self, key: &str) -> Option<&[i32]> { match key { #( #get_list_int_arms )* _ => None } }
-            fn get_list_uint(&self, key: &str) -> Option<&[u32]> { match key { #( #get_list_uint_arms )* _ => None } }
-            fn get_list_float(&self, key: &str) -> Option<&[f32]> { match key { #( #get_list_float_arms )* _ => None } }
-            fn get_list_double(&self, key: &str) -> Option<&[f64]> { match key { #( #get_list_double_arms )* _ => None } }
+            fn get_list_char(&self, key: &str) -> Option<::std::borrow::Cow<'_, [i8]>> { match key { #( #get_list_char_arms )* _ => None } }
+            fn get_list_uchar(&self, key: &str) -> Option<::std::borrow::Cow<'_, [u8]>> { match key { #( #get_list_uchar_arms )* _ => None } }
+            fn get_list_short(&self, key: &str) -> Option<::std::borrow::Cow<'_, [i16]>> { match key { #( #get_list_short_arms )* _ => None } }
+            fn get_list_ushort(&self, key: &str) -> Option<::std::borrow::Cow<'_, [u16]>> { match key { #( #get_list_ushort_arms )* _ => None } }
+            fn get_list_int(&self, key: &str) -> Option<::std::borrow::Cow<'_, [i32]>> { match key { #( #get_list_int_arms )* _ => None } }
+            fn get_list_uint(&self, key: &str) -> Option<::std::borrow::Cow<'_, [u32]>> { match key { #( #get_list_uint_arms )* _ => None } }
+            fn get_list_float(&self, key: &str) -> Option<::std::borrow::Cow<'_, [f32]>> { match key { #( #get_list_float_arms )* _ => None } }
+            fn get_list_double(&self, key: &str) -> Option<::std::borrow::Cow<'_, [f64]>> { match key { #( #get_list_double_arms )* _ => None } }
         }
     };
 
