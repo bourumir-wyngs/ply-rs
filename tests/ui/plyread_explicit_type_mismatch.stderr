@@ -1,0 +1,6 @@
+error: ply(type = "uint") implies file type u32, but field is of type i64
+ --> tests/ui/plyread_explicit_type_mismatch.rs:6:5
+  |
+6 | /     #[ply(type = "uint")]
+7 | |     foo: i64,
+  | |____________^

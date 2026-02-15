@@ -236,4 +236,73 @@ impl<T: Copy> GetProperty<T> for Option<T> {
     }
 }
 
-// Marker traits `PlyRead`/`PlyWrite` were removed along with the schema traits.
+impl GetProperty<f32> for f64 {
+    fn get(&self) -> Option<f32> {
+        // Reading into `f64` with `#[ply(type = "float")]` originates from an `f32` value,
+        // so converting back to `f32` for `PropertyAccess::get_float()` is lossless relative
+        // to the file representation.
+        Some(*self as f32)
+    }
+}
+
+impl GetProperty<f32> for Option<f64> {
+    fn get(&self) -> Option<f32> {
+        self.as_ref().map(|v| *v as f32)
+    }
+}
+
+// ---- Checked narrowing conversions for the "wide integer" extension ----
+//
+// Property accessors in this crate expose file scalar types as i8/u8/i16/u16/i32/u32/f32/f64.
+// When users store values in wider integer types (i64/u64/i128/u128) we still want
+// `#[derive(PlyWrite)]` to be able to provide values for the schema's `int/uint` fields.
+// These impls allow derived getters to request `i32`/`u32` and receive `None` on overflow.
+
+impl GetProperty<i32> for i64 {
+    fn get(&self) -> Option<i32> {
+        i32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<i32> for i128 {
+    fn get(&self) -> Option<i32> {
+        i32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<u32> for u64 {
+    fn get(&self) -> Option<u32> {
+        u32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<u32> for u128 {
+    fn get(&self) -> Option<u32> {
+        u32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<i32> for Option<i64> {
+    fn get(&self) -> Option<i32> {
+        self.as_ref().and_then(|v| i32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<i32> for Option<i128> {
+    fn get(&self) -> Option<i32> {
+        self.as_ref().and_then(|v| i32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<u32> for Option<u64> {
+    fn get(&self) -> Option<u32> {
+        self.as_ref().and_then(|v| u32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<u32> for Option<u128> {
+    fn get(&self) -> Option<u32> {
+        self.as_ref().and_then(|v| u32::try_from(*v).ok())
+    }
+}
+

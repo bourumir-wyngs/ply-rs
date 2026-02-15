@@ -312,9 +312,9 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             let check_result = if let Some(target_kind) = explicit_kind.as_ref() {
                 let inner_type = if let Some(inner) = is_vec(conversion_type) { inner } else { conversion_type };
                 if let Some(field_kind) = scalar_ident(inner_type) {
-                    if *target_kind != field_kind {
+                    if !ply_read_explicit_type_compatible(target_kind, &field_kind) {
                         Some(Err(syn::Error::new_spanned(field, format!(
-                            "ply(type = \"{}\") implies type {}, but field is of type {}",
+                            "ply(type = \"{}\") implies file type {}, but field is of type {}",
                             et, target_kind, field_kind
                         ))))
                     } else { None }
@@ -324,8 +324,17 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             if let Some(err) = check_result {
                 err
             } else {
-                // `explicit_kind` is validated above; unwrap is safe here.
-                let (_, cast_ty) = scalar_type_tokens(explicit_kind.as_ref().unwrap(), &ply_rs);
+                // Cast into the Rust field type when it is a recognized scalar.
+                // Otherwise (e.g., generic `T` with `SetProperty<f32>`), cast into the explicit
+                // file type and rely on `SetProperty<file_ty>`.
+                let inner_type = if let Some(inner) = is_vec(conversion_type) { inner } else { conversion_type };
+                let cast_ty = if scalar_ident(inner_type).is_some() {
+                    quote! { #inner_type }
+                } else {
+                    // `explicit_kind` is validated above; unwrap is safe here.
+                    let (_, cast_ty) = scalar_type_tokens(explicit_kind.as_ref().unwrap(), &ply_rs);
+                    cast_ty
+                };
                 if let Some(_kind) = explicit_kind.as_ref() {
                     if let Some(_inner_vec) = is_vec(conversion_type) {
                         let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
@@ -382,6 +391,14 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
              };
 
              if let Some(kind) = inner_kind {
+                 // List getters return borrowed slices of concrete scalar types.
+                 // If the Rust field uses a different (even if wider) element type, we can't
+                 // safely provide `&[i32]`/`&[u32]`/etc without allocating/converting, so we
+                 // simply omit the getter arm in that case.
+                 if explicit_kind.is_some() && scalar_ident(inner_vec_type).as_ref() != Some(&kind) {
+                     continue;
+                 }
+
                  use ScalarKind::*;
                  let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
                  let field_access_list = if is_opt.is_some() {
@@ -403,22 +420,37 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
                  }
              }
         } else if let Some(kind) = effective_kind {
-             // Scalar type
-             use ScalarKind::*;
-             let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
-             let field_access_scalar = quote! { #ply_rs::ply::GetProperty::<#cast_ty>::get(&self.#field_name) };
-             let arm = quote! { #( #ply_name_lits )|* => #field_access_scalar, };
-             match kind {
+            // Scalar type
+            //
+            // Wide integer extension policy:
+            // - `i64`/`i128` are exposed through `get_int()` (i32) with checked narrowing
+            // - `u64`/`u128` are exposed through `get_uint()` (u32) with checked narrowing
+            //
+            // This matches the schema mapping (`I64/I128 -> Int`, `U64/U128 -> UInt`) and
+            // lets writers fail on overflow via `None`.
+            use ScalarKind::*;
+
+            let cast_ty = match kind {
+                I64 | I128 => quote! { i32 },
+                U64 | U128 => quote! { u32 },
+                _ => {
+                    let (_, cast_ty) = scalar_type_tokens(&kind, &ply_rs);
+                    cast_ty
+                }
+            };
+
+            let field_access_scalar = quote! { #ply_rs::ply::GetProperty::<#cast_ty>::get(&self.#field_name) };
+            let arm = quote! { #( #ply_name_lits )|* => #field_access_scalar, };
+            match kind {
                 I8 => get_char_arms.push(arm),
                 U8 => get_uchar_arms.push(arm),
                 I16 => get_short_arms.push(arm),
                 U16 => get_ushort_arms.push(arm),
-                I32 => get_int_arms.push(arm),
-                U32 => get_uint_arms.push(arm),
+                I32 | I64 | I128 => get_int_arms.push(arm),
+                U32 | U64 | U128 => get_uint_arms.push(arm),
                 F32 => get_float_arms.push(arm),
                 F64 => get_double_arms.push(arm),
-                I64 | U64 | I128 | U128 => {},
-             }
+            }
         }
     }
 
@@ -812,6 +844,33 @@ fn scalar_kind_from_str_for_ply_read(s: &str) -> Option<ScalarKind> {
         "float" | "f32" => Some(ScalarKind::F32),
         "double" | "f64" => Some(ScalarKind::F64),
         _ => None,
+    }
+}
+
+fn ply_read_explicit_type_compatible(file_kind: &ScalarKind, field_kind: &ScalarKind) -> bool {
+    use ScalarKind::*;
+
+    if file_kind == field_kind {
+        return true;
+    }
+
+    match (file_kind, field_kind) {
+        // Signed widening
+        (I8, I16 | I32 | I64 | I128) => true,
+        (I16, I32 | I64 | I128) => true,
+        (I32, I64 | I128) => true,
+        (I64, I128) => true,
+
+        // Unsigned widening
+        (U8, U16 | U32 | U64 | U128) => true,
+        (U16, U32 | U64 | U128) => true,
+        (U32, U64 | U128) => true,
+        (U64, U128) => true,
+
+        // Float widening
+        (F32, F64) => true,
+
+        _ => false,
     }
 }
 
