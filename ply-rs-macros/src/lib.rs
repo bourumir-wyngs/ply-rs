@@ -299,6 +299,27 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+
+        let explicit_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
+            match scalar_kind_from_str_for_ply_read(et) {
+                Some(kind) => Some(kind),
+                None => {
+                    return TokenStream::from(
+                        syn::Error::new_spanned(
+                            field,
+                            format!(
+                                "Unsupported explicit type: {}. Use one of: {}",
+                                et,
+                                supported_explicit_types_for_ply_read_message()
+                            ),
+                        )
+                        .to_compile_error(),
+                    )
+                }
+            }
+        } else {
+            None
+        };
         let ply_names = match validate_and_dedupe_ply_names(field, ply_attr.names, &mut seen_names) {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),
@@ -314,10 +335,10 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
         let conversion = if let Some(et) = ply_attr.explicit_type.as_deref() {
             let ply_rs = get_crate_name();
 
-            let check_result = if let Some(target_kind) = scalar_kind_from_str(et) {
+            let check_result = if let Some(target_kind) = explicit_kind.as_ref() {
                 let inner_type = if let Some(inner) = is_vec(conversion_type) { inner } else { conversion_type };
                 if let Some(field_kind) = scalar_ident(inner_type) {
-                    if target_kind != field_kind {
+                    if *target_kind != field_kind {
                         Some(Err(syn::Error::new_spanned(field, format!(
                             "ply(type = \"{}\") implies type {}, but field is of type {}",
                             et, target_kind, field_kind
@@ -329,20 +350,9 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             if let Some(err) = check_result {
                 err
             } else {
-                let scalar_type_from_str = |s: &str| -> Option<proc_macro2::TokenStream> {
-                    match s {
-                        "char" | "i8" => Some(quote! { i8 }),
-                        "uchar" | "u8" => Some(quote! { u8 }),
-                        "short" | "i16" => Some(quote! { i16 }),
-                        "ushort" | "u16" => Some(quote! { u16 }),
-                        "int" | "i32" => Some(quote! { i32 }),
-                        "uint" | "u32" => Some(quote! { u32 }),
-                        "float" | "f32" => Some(quote! { f32 }),
-                        "double" | "f64" => Some(quote! { f64 }),
-                        _ => None,
-                    }
-                };
-                if let Some(cast_ty) = scalar_type_from_str(et) {
+                // `explicit_kind` is validated above; unwrap is safe here.
+                let (_, cast_ty) = scalar_type_tokens(explicit_kind.as_ref().unwrap(), &ply_rs);
+                if let Some(_kind) = explicit_kind.as_ref() {
                     if let Some(_inner_vec) = is_vec(conversion_type) {
                         let (list_variants, _) = list_match_and_cast_tokens_with_ty(&cast_ty, &ply_rs);
                         Ok(quote! {
@@ -361,7 +371,7 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
                         })
                     }
                 } else {
-                    generate_conversion(conversion_type)
+                    unreachable!("explicit_kind validated when explicit_type is present")
                 }
             }
         } else {
@@ -392,54 +402,16 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
         });
 
         // Getter logic
-        let effective_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
-            let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
-                match s {
-                    "char" | "i8" => Some(ScalarKind::I8),
-                    "uchar" | "u8" => Some(ScalarKind::U8),
-                    "short" | "i16" => Some(ScalarKind::I16),
-                    "ushort" | "u16" => Some(ScalarKind::U16),
-                    "int" | "i32" => Some(ScalarKind::I32),
-                    "uint" | "u32" => Some(ScalarKind::U32),
-                    "float" | "f32" => Some(ScalarKind::F32),
-                    "double" | "f64" => Some(ScalarKind::F64),
-
-
-
-
-
-
-                    _ => None,
-                }
-            };
-            scalar_type_from_str_kind(et)
+        let effective_kind = if explicit_kind.is_some() {
+            explicit_kind.clone()
         } else {
             scalar_ident(conversion_type)
         };
 
         if let Some(inner_vec_type) = is_vec(conversion_type) {
              // List type
-             let inner_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
-                let scalar_type_from_str_kind = |s: &str| -> Option<ScalarKind> {
-                    match s {
-                        "char" | "i8" => Some(ScalarKind::I8),
-                        "uchar" | "u8" => Some(ScalarKind::U8),
-                        "short" | "i16" => Some(ScalarKind::I16),
-                        "ushort" | "u16" => Some(ScalarKind::U16),
-                        "int" | "i32" => Some(ScalarKind::I32),
-                        "uint" | "u32" => Some(ScalarKind::U32),
-                        "float" | "f32" => Some(ScalarKind::F32),
-                        "double" | "f64" => Some(ScalarKind::F64),
-
-
-
-
-
-
-                        _ => None,
-                    }
-                };
-                scalar_type_from_str_kind(et)
+             let inner_kind = if explicit_kind.is_some() {
+                explicit_kind.clone()
              } else {
                 scalar_ident(inner_vec_type)
              };
@@ -740,7 +712,7 @@ fn is_vec(ty: &Type) -> Option<&Type> {
     None
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum ScalarKind { I8, U8, I16, U16, I32, U32, I64, U64, I128, U128, F32, F64 }
 
 impl std::fmt::Display for ScalarKind {
@@ -762,7 +734,7 @@ impl std::fmt::Display for ScalarKind {
     }
 }
 
-fn scalar_kind_from_str(s: &str) -> Option<ScalarKind> {
+fn scalar_kind_from_str_for_ply_read(s: &str) -> Option<ScalarKind> {
     match s {
         "char" | "i8" => Some(ScalarKind::I8),
         "uchar" | "u8" => Some(ScalarKind::U8),
@@ -772,16 +744,12 @@ fn scalar_kind_from_str(s: &str) -> Option<ScalarKind> {
         "uint" | "u32" => Some(ScalarKind::U32),
         "float" | "f32" => Some(ScalarKind::F32),
         "double" | "f64" => Some(ScalarKind::F64),
-        "long" | "i64" => Some(ScalarKind::I64),
-        "ulong" | "u64" => Some(ScalarKind::U64),
-        "i128" => Some(ScalarKind::I128),
-        "u128" => Some(ScalarKind::U128),
-
-
-
-
         _ => None,
     }
+}
+
+fn supported_explicit_types_for_ply_read_message() -> &'static str {
+    "i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double"
 }
 
 /// Identifies supported scalar types.
