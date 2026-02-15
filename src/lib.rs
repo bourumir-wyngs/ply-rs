@@ -32,8 +32,7 @@ pub mod writer;
 
 extern crate self as ply_rs_bw;
  
-pub use ply_rs_macros::{PlyRead, PlyWrite, FromPly, ToPly, ReadSchema};
-pub use ply::{PlyRead, PlyWrite};
+pub use ply_rs_macros::{PlyRead, PlyWrite, FromPly, ToPly};
 pub use parser::FromPly;
 pub use writer::ToPly;
 

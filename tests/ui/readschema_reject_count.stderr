@@ -1,6 +1,5 @@
-error: `ply(count = ...)` is not supported by `#[derive(ReadSchema)]`; supported sub-attributes are: `name`
- --> tests/ui/readschema_reject_count.rs:5:5
+error: cannot find derive macro `ReadSchema` in this scope
+ --> tests/ui/readschema_reject_count.rs:1:10
   |
-5 | /     #[ply(count = "u8")]
-6 | |     a: u32,
-  | |__________^
+1 | #[derive(ReadSchema)]
+  |          ^^^^^^^^^^

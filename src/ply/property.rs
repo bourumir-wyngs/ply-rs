@@ -188,31 +188,17 @@ pub trait PropertyAccess {
     }
 }
 
-/// Defines whether a property is required or optional.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Requiredness {
-    /// The property must be present in the header.
-    Required,
-    /// The property may be missing from the header.
-    Optional,
-}
-
-/// Provides a schema for the properties expected by a data structure.
-///
-/// This is used by the parser to validate that all required properties are present
-/// in the PLY header before attempting to read the payload.
-///
-/// Optional properties (using `Option<T>`) are allowed when reading.
-pub trait ReadSchema {
-    /// Returns a list of properties (name and requiredness) expected by this type.
-    fn schema() -> Vec<(String, Requiredness)>;
-}
+// NOTE: Previous versions exposed schema traits (`ReadSchema`/`WriteSchema`) and a
+// `Requiredness` enum. These were removed because they were not used by the runtime
+// parser/writer and could not accurately represent alias groups.
 
 /// Trait that describes the schema of a property including its type.
 ///
-/// Note: Optional properties (`Option<T>`) are NOT supported for writing
-/// because the PLY format requires every element instance to have a value
-/// for every property declared in the header.
+/// This is used by macro-based writing (`#[derive(ToPly)]`) to construct element/property
+/// definitions for the PLY header.
+///
+/// Note: Optional properties (`Option<T>`) are NOT supported for writing because the PLY format
+/// requires every element instance to have a value for every property declared in the header.
 pub trait WriteSchema {
     /// Returns a list of properties (name and type) expected by this type.
     fn property_type_schema() -> Vec<(String, PropertyType)>;
@@ -254,10 +240,4 @@ impl<T: Copy> GetProperty<T> for Option<T> {
     }
 }
 
-/// Allows a type to be automatically parsed from a PLY element.
-pub trait PlyRead: PropertyAccess + ReadSchema {}
-impl<T: PropertyAccess + ReadSchema> PlyRead for T {}
-
-/// Allows a type to be automatically written to a PLY element.
-pub trait PlyWrite: WriteSchema {}
-impl<T: WriteSchema> PlyWrite for T {}
+// Marker traits `PlyRead`/`PlyWrite` were removed along with the schema traits.

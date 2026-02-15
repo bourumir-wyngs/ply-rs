@@ -8,7 +8,7 @@
 //!
 //! Use this macro to make a struct parsable from a PLY element.
 //!
-//! - **Implements**: `PropertyAccess` and `ReadSchema`.
+//! - **Implements**: `PropertyAccess`.
 //! - **Features**:
 //!     - Generates `new()`, `set_property()`, and `get_*()` methods.
 //!     - Handles `Option<T>` fields (mapping them to optional PLY properties).
@@ -24,17 +24,12 @@
 //! - **Constraint**: Does NOT support `Option<T>` (PLY files require uniform data for all elements).
 //! - **Usage**: Combine with `PlyRead` (or manual `PropertyAccess`) to write structs to a PLY file.
 //!
-//! ## `#[derive(ReadSchema)]`
-//!
-//! - **Implements**: `ReadSchema` only.
-//! - **Usage**: Use this if you implement `PropertyAccess` manually but want to generate the schema definition automatically.
-//!
 //! ## `#[derive(FromPly)]`
 //!
 //! Use this on a container struct (e.g. `Mesh`) to read an entire PLY file into strictly typed vectors.
 //!
 //! - **Implements**: `FromPly`.
-//! - **Usage**: The struct must have named fields of type `Vec<T>`, where `T` implements `PlyRead` (or `PropertyAccess` + `ReadSchema`).
+//! - **Usage**: The struct must have named fields of type `Vec<T>`, where `T` implements `PropertyAccess`.
 //!   The field names (or `#[ply(name="...")]`) map to PLY element names (e.g. "vertex", "face").
 //!
 //! ## `#[derive(ToPly)]`
@@ -223,73 +218,9 @@ fn validate_and_dedupe_ply_names(
 }
 
 
-/// Procedural macro to derive the `ReadSchema` trait.
-///
-/// This macro generates the `schema` method, which describes the expected properties
-/// of the struct and whether they are required or optional (based on `Option<T>`).
-#[proc_macro_derive(ReadSchema, attributes(ply))]
-pub fn derive_read_schema(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let name = &input.ident;
-
-    let fields = match input.data {
-        Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref fields) => &fields.named,
-            _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "ReadSchema only supports named fields").to_compile_error()),
-        },
-        _ => return TokenStream::from(syn::Error::new_spanned(&input.ident, "ReadSchema only supports structs").to_compile_error()),
-    };
-
-    let mut schema_entries = Vec::new();
-    let mut seen_names = std::collections::HashSet::new();
-
-    for field in fields {
-        let ply_attr = match parse_ply_attr(field) {
-            Ok(attr) => attr,
-            Err(err) => return TokenStream::from(err.to_compile_error()),
-        };
-        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "ReadSchema", false, false) {
-            return TokenStream::from(err.to_compile_error());
-        }
-
-        let ply_names = ply_attr.names;
-        let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
-            Ok(names) => names,
-            Err(err) => return TokenStream::from(err.to_compile_error()),
-        };
-        let ply_name = ply_names[0].clone();
-
-        let ply_rs = get_crate_name();
-        let requiredness = if is_option(&field.ty).is_some() {
-            quote! { #ply_rs::ply::Requiredness::Optional }
-        } else {
-            quote! { #ply_rs::ply::Requiredness::Required }
-        };
-
-        let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
-        schema_entries.push(quote! {
-            (#ply_name_lit.to_string(), #requiredness)
-        });
-    }
-
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let ply_rs = get_crate_name();
-    let expanded = quote! {
-        impl #impl_generics #ply_rs::ply::ReadSchema for #name #ty_generics #where_clause {
-            fn schema() -> Vec<(String, #ply_rs::ply::Requiredness)> {
-                vec![
-                    #( #schema_entries ),*
-                ]
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
-
 /// Procedural macro to derive the `PlyRead` trait.
 ///
-/// This macro derives both `PropertyAccess` and `ReadSchema`.
+/// This macro derives `PropertyAccess`.
 /// It is the primary macro for defining PLY element structures for reading.
 ///
 /// Note: Optional fields (`Option<T>`) are supported when reading PLY files.
@@ -307,7 +238,6 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
     };
 
     let mut set_arms = Vec::new();
-    let mut schema_entries = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
     let ply_rs = get_crate_name();
 
@@ -369,7 +299,6 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
         };
 
         let ply_name_lits: Vec<_> = ply_names.iter().map(|n| syn::LitStr::new(n, proc_macro2::Span::call_site())).collect();
-        let ply_name_lit = &ply_name_lits[0];
 
         let is_opt = is_option(field_type);
         let conversion_type = if let Some(inner) = is_opt.as_ref() { inner } else { field_type };
@@ -434,15 +363,6 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             }
         };
         set_arms.push(arm);
-
-        let requiredness = if is_opt.is_some() {
-            quote! { #ply_rs::ply::Requiredness::Optional }
-        } else {
-            quote! { #ply_rs::ply::Requiredness::Required }
-        };
-        schema_entries.push(quote! {
-            (#ply_name_lit.to_string(), #requiredness)
-        });
 
         // Getter logic
         let effective_kind = if explicit_kind.is_some() {
@@ -527,11 +447,6 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             fn get_list_uint(&self, key: &str) -> Option<&[u32]> { match key { #( #get_list_uint_arms )* _ => None } }
             fn get_list_float(&self, key: &str) -> Option<&[f32]> { match key { #( #get_list_float_arms )* _ => None } }
             fn get_list_double(&self, key: &str) -> Option<&[f64]> { match key { #( #get_list_double_arms )* _ => None } }
-        }
-        impl #impl_generics #ply_rs::ply::ReadSchema for #name #ty_generics #where_clause {
-            fn schema() -> Vec<(String, #ply_rs::ply::Requiredness)> {
-                vec![ #( #schema_entries ),* ]
-            }
         }
     };
 
