@@ -11,6 +11,8 @@
 //! - **Implements**: `PropertyAccess`.
 //! - **Features**:
 //!     - Generates `new()`, `set_property()`, and `get_*()` methods.
+//!     - Does **not** require `Default` on the struct; it initializes each field with `Default::default()`.
+//!       (So each field type must implement `Default`.)
 //!     - Handles `Option<T>` fields (mapping them to optional PLY properties).
 //! - **Usage**: Essential for reading. Also useful for writing (provides getters), unless you implement `PropertyAccess` manually.
 //!
@@ -54,14 +56,14 @@
 //! ```ignore
 //! use ply_rs_bw::{PlyRead, PlyWrite, FromPly, ToPly};
 //!
-//! #[derive(Debug, Default, PlyRead, PlyWrite)]
+//! #[derive(Debug, PlyRead, PlyWrite)]
 //! struct Vertex {
 //!     #[ply(name = "x")] x: f32,
 //!     #[ply(name = "y")] y: f32,
 //!     #[ply(name = "z")] z: f32,
 //! }
 //!
-//! #[derive(Debug, Default, PlyRead, PlyWrite)]
+//! #[derive(Debug, PlyRead, PlyWrite)]
 //! struct Face {
 //!     #[ply(name = "vertex_indices")] indices: Vec<u32>; // Use explicit type or let it infer
 //! }
@@ -420,13 +422,42 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
         }
     }
 
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    // Build `new()` using field-by-field defaults so we only require `Default` for each field,
+    // not for the whole struct.
+    let new_inits: Vec<_> = fields
+        .iter()
+        .map(|field| {
+            let field_name = field
+                .ident
+                .as_ref()
+                .expect("PlyRead only supports named fields");
+            quote! { #field_name: ::core::default::Default::default() }
+        })
+        .collect();
+
+    // Preserve any existing where-clause, but also add `Default` bounds for each field type.
+    // This makes the resulting compiler error point more clearly at `#[derive(PlyRead)]`.
+    let mut where_predicates: Vec<proc_macro2::TokenStream> = Vec::new();
+    if let Some(wc) = input.generics.where_clause.as_ref() {
+        where_predicates.extend(wc.predicates.iter().map(|p| quote! { #p }));
+    }
+    where_predicates.extend(fields.iter().map(|field| {
+        let ty = &field.ty;
+        quote! { #ty: ::core::default::Default }
+    }));
+    let where_clause = if where_predicates.is_empty() {
+        quote! {}
+    } else {
+        quote! { where #( #where_predicates, )* }
+    };
+
+    let (impl_generics, ty_generics, _where_clause) = input.generics.split_for_impl();
     let expanded = quote! {
         impl #impl_generics #ply_rs::ply::PropertyAccess for #name #ty_generics #where_clause {
-            fn new() -> Self { Default::default() }
+            fn new() -> Self { Self { #( #new_inits, )* } }
             fn set_property(&mut self, key: &str, property: #ply_rs::ply::Property) {
                 match key {
-                    #( #set_arms ),*
+                    #( #set_arms, )*
                     _ => {},
                 }
             }
@@ -477,12 +508,45 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
     let mut seen_names = std::collections::HashSet::new();
     let ply_rs = get_crate_name();
 
+    let scalar_category_from_str = |s: &str| -> Option<&'static str> {
+        match s {
+            "char" | "i8" => Some("char"),
+            "uchar" | "u8" => Some("uchar"),
+            "short" | "i16" => Some("short"),
+            "ushort" | "u16" => Some("ushort"),
+            "int" | "i32" => Some("int"),
+            "uint" | "u32" => Some("uint"),
+            "float" | "f32" => Some("float"),
+            "double" | "f64" => Some("double"),
+            _ => None,
+        }
+    };
+
+    let scalar_category_from_kind = |k: &ScalarKind| -> &'static str {
+        use ScalarKind::*;
+        match k {
+            I8 => "char",
+            U8 => "uchar",
+            I16 => "short",
+            U16 => "ushort",
+            I32 | I64 | I128 => "int",
+            U32 | U64 | U128 => "uint",
+            F32 => "float",
+            F64 => "double",
+        }
+    };
+
     for field in fields {
         let field_type = &field.ty;
         let ply_attr = match parse_ply_attr(field) {
             Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+
+        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "PlyWrite", true, true) {
+            return TokenStream::from(err.to_compile_error());
+        }
+
         let ply_names = match validate_and_dedupe_ply_names(field, ply_attr.names, &mut seen_names) {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),
@@ -497,6 +561,45 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
 
         if is_option(field_type).is_some() {
              return TokenStream::from(syn::Error::new_spanned(field_type, "optional properties are only supported by the reader. PlyWrite does not support Option<T>.").to_compile_error());
+        }
+
+        // Safety check: if the field type is recognized by the derives (scalar or Vec<scalar>),
+        // then an explicit `#[ply(type = "...")]` must be compatible with what the derived
+        // accessors can provide.
+        if let Some(et) = ply_attr.explicit_type.as_deref() {
+            if let Some(explicit_cat) = scalar_category_from_str(et) {
+                if let Some(inner) = is_vec(field_type) {
+                    if let Some(kind) = scalar_ident(inner) {
+                        let expected_cat = scalar_category_from_kind(&kind);
+                        if explicit_cat != expected_cat {
+                            return TokenStream::from(
+                                syn::Error::new_spanned(
+                                    field,
+                                    format!(
+                                        "ply(type=\"{}\") does not match the field type (expected {} for Vec<{}>)",
+                                        et, expected_cat, kind
+                                    ),
+                                )
+                                .to_compile_error(),
+                            );
+                        }
+                    }
+                } else if let Some(kind) = scalar_ident(field_type) {
+                    let expected_cat = scalar_category_from_kind(&kind);
+                    if explicit_cat != expected_cat {
+                        return TokenStream::from(
+                            syn::Error::new_spanned(
+                                field,
+                                format!(
+                                    "ply(type=\"{}\") does not match the field type (expected {} for {})",
+                                    et, expected_cat, kind
+                                ),
+                            )
+                            .to_compile_error(),
+                        );
+                    }
+                }
+            }
         }
 
         let prop_type_token = match get_property_type_tokens(field_type, ply_attr.count_type.as_deref(), ply_attr.explicit_type.as_deref(), Some(field)) {
@@ -598,8 +701,8 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
                             #ply_names_pats => {
                                 let p = #ply_rs::parser::Parser::<#inner_tys>::new();
                                 #field_names = p.read_payload_for_element(&mut reader, element_def, &header)?;
-                            }
-                        ),*
+                            },
+                        )*
                         _ => {
                              // skip unknown elements
                              let p = #ply_rs::parser::Parser::<IgnoredElement>::new();

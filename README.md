@@ -26,7 +26,7 @@ A PLY file consists of 3D points (vertices), which are defined separately, and f
 ```rust
 use ply_rs_bw::{PlyRead, PlyWrite, ToPly, FromPly};
 
-#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+#[derive(Debug, PlyRead, PlyWrite, PartialEq)]
 struct Vertex {
     // we use maximal abstraction (ply types and names are inferred).
     x: f32,
@@ -34,7 +34,7 @@ struct Vertex {
     z: f32,
 }
 
-#[derive(Debug, Default, PlyRead, PlyWrite, PartialEq)]
+#[derive(Debug, PlyRead, PlyWrite, PartialEq)]
 struct Face {
     // we use maximum details
     #[ply(name = "vertex_indices", type = "uint", count = "uchar")]
