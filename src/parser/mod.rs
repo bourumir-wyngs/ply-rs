@@ -98,7 +98,7 @@ pub struct Parser<E: PropertyAccess> {
 
 impl<E: PropertyAccess> Clone for Parser<E> {
     fn clone(&self) -> Self {
-        Parser { phantom: PhantomData }
+        *self
     }
 }
 

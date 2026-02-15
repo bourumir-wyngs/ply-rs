@@ -43,7 +43,7 @@ pub struct Writer<E: PropertyAccess> {
 
 impl<E: PropertyAccess> Clone for Writer<E> {
     fn clone(&self) -> Self {
-        Writer { phantom: PhantomData }
+        *self
     }
 }
 
