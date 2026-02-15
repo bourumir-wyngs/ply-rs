@@ -1,0 +1,6 @@
+error: duplicate ply name: vert
+  --> tests/ui/fromply_alias_collision.rs:12:5
+   |
+12 | /     #[ply(name = "face,vert")]
+13 | |     faces: Vec<Vertex>,
+   | |______________________^

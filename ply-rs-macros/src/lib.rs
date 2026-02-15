@@ -167,6 +167,27 @@ fn parse_ply_name(field: &syn::Field) -> Result<Vec<String>, syn::Error> {
     Ok(parse_ply_attr(field)?.names)
 }
 
+fn validate_and_dedupe_ply_names(
+    field: &syn::Field,
+    ply_names: Vec<String>,
+    seen_names: &mut std::collections::HashSet<String>,
+) -> Result<Vec<String>, syn::Error> {
+    let mut local_seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(ply_names.len());
+
+    for n in ply_names {
+        if !local_seen.insert(n.clone()) {
+            return Err(syn::Error::new_spanned(field, format!("duplicate ply name: {n}")));
+        }
+        if !seen_names.insert(n.clone()) {
+            return Err(syn::Error::new_spanned(field, format!("duplicate ply name: {n}")));
+        }
+        out.push(n);
+    }
+
+    Ok(out)
+}
+
 
 /// Procedural macro to derive the `ReadSchema` trait.
 ///
@@ -193,11 +214,11 @@ pub fn derive_read_schema(input: TokenStream) -> TokenStream {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+        let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
+            Ok(names) => names,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
         let ply_name = ply_names[0].clone();
-
-        if !seen_names.insert(ply_name.clone()) {
-            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
-        }
 
         let ply_rs = get_crate_name();
         let requiredness = if is_option(&field.ty).is_some() {
@@ -278,12 +299,10 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
-        let ply_names = ply_attr.names;
-        let ply_name_primary = ply_names[0].clone();
-
-        if !seen_names.insert(ply_name_primary.clone()) {
-            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name_primary)).to_compile_error());
-        }
+        let ply_names = match validate_and_dedupe_ply_names(field, ply_attr.names, &mut seen_names) {
+            Ok(names) => names,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
         let ply_name_lits: Vec<_> = ply_names.iter().map(|n| syn::LitStr::new(n, proc_macro2::Span::call_site())).collect();
         let ply_name_lit = &ply_name_lits[0];
@@ -472,7 +491,7 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             fn new() -> Self { Default::default() }
             fn set_property(&mut self, key: &str, property: #ply_rs::ply::Property) {
                 match key {
-                    #( #set_arms )*
+                    #( #set_arms ),*
                     _ => {},
                 }
             }
@@ -534,11 +553,11 @@ pub fn derive_ply_write(input: TokenStream) -> TokenStream {
             Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
-        let ply_name = ply_attr.names[0].clone();
-
-        if !seen_names.insert(ply_name.clone()) {
-            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply property name: {}", ply_name)).to_compile_error());
-        }
+        let ply_names = match validate_and_dedupe_ply_names(field, ply_attr.names, &mut seen_names) {
+            Ok(names) => names,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
+        let ply_name = ply_names[0].clone();
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
 
@@ -601,9 +620,10 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
 
-        if !seen_names.insert(ply_names[0].clone()) {
-            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply element name: {}", ply_names[0])).to_compile_error());
-        }
+        let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
+            Ok(names) => names,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
 
         let inner_ty = match is_vec(field_type) {
             Some(ty) => ty,
@@ -643,7 +663,7 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
                                 let p = #ply_rs::parser::Parser::<#inner_tys>::new();
                                 #field_names = p.read_payload_for_element(&mut reader, element_def, &header)?;
                             }
-                        )*
+                        ),*
                         _ => {
                              // skip unknown elements
                              let p = #ply_rs::parser::Parser::<IgnoredElement>::new();
@@ -888,11 +908,11 @@ pub fn derive_to_ply(input: TokenStream) -> TokenStream {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+        let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
+            Ok(names) => names,
+            Err(err) => return TokenStream::from(err.to_compile_error()),
+        };
         let ply_name = ply_names[0].clone();
-
-        if !seen_names.insert(ply_name.clone()) {
-            return TokenStream::from(syn::Error::new_spanned(field, format!("duplicate ply element name: {}", ply_name)).to_compile_error());
-        }
 
         let ply_name_lit = syn::LitStr::new(&ply_name, proc_macro2::Span::call_site());
         let inner_ty = match is_vec(field_type) {

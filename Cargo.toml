@@ -24,6 +24,7 @@ thiserror = "2.0.18"
 
 [dev-dependencies]
 doc-comment = "^0.3"
+trybuild = "1.0"
 
 [[example]]
 name = "read_ply"
