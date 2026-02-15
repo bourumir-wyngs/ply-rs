@@ -118,6 +118,45 @@ struct PlyAttr {
     explicit_type: Option<String>,
 }
 
+fn validate_ply_attr_supported_by_macro(
+    field: &syn::Field,
+    ply_attr: &PlyAttr,
+    macro_name: &str,
+    allow_count: bool,
+    allow_type: bool,
+) -> Result<(), syn::Error> {
+    let mut supported = vec!["name"];
+    if allow_count {
+        supported.push("count");
+    }
+    if allow_type {
+        supported.push("type");
+    }
+    let supported = supported
+        .into_iter()
+        .map(|x| format!("`{x}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if !allow_count && ply_attr.count_type.is_some() {
+        return Err(syn::Error::new_spanned(
+            field,
+            format!(
+                "`ply(count = ...)` is not supported by `#[derive({macro_name})]`; supported sub-attributes are: {supported}"
+            ),
+        ));
+    }
+    if !allow_type && ply_attr.explicit_type.is_some() {
+        return Err(syn::Error::new_spanned(
+            field,
+            format!(
+                "`ply(type = ...)` is not supported by `#[derive({macro_name})]`; supported sub-attributes are: {supported}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Parses the `#[ply(...)]` attributes and returns the PLY property name and optional count type.
 fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
     let mut attr_data = PlyAttr {
@@ -160,11 +199,6 @@ fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
     }
 
     Ok(attr_data)
-}
-
-/// Parses the `#[ply(name = "...")]` attribute and returns the PLY property name.
-fn parse_ply_name(field: &syn::Field) -> Result<Vec<String>, syn::Error> {
-    Ok(parse_ply_attr(field)?.names)
 }
 
 fn validate_and_dedupe_ply_names(
@@ -210,10 +244,15 @@ pub fn derive_read_schema(input: TokenStream) -> TokenStream {
     let mut seen_names = std::collections::HashSet::new();
 
     for field in fields {
-        let ply_names = match parse_ply_name(field) {
-            Ok(names) => names,
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "ReadSchema", false, false) {
+            return TokenStream::from(err.to_compile_error());
+        }
+
+        let ply_names = ply_attr.names;
         let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),
@@ -299,6 +338,10 @@ pub fn derive_ply_read(input: TokenStream) -> TokenStream {
             Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+
+        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "PlyRead", false, true) {
+            return TokenStream::from(err.to_compile_error());
+        }
 
         let explicit_kind = if let Some(et) = ply_attr.explicit_type.as_deref() {
             match scalar_kind_from_str_for_ply_read(et) {
@@ -587,10 +630,16 @@ pub fn derive_from_ply(input: TokenStream) -> TokenStream {
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
-        let ply_names = match parse_ply_name(field) {
-            Ok(names) => names,
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+
+        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "FromPly", false, false) {
+            return TokenStream::from(err.to_compile_error());
+        }
+
+        let ply_names = ply_attr.names;
 
         let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
             Ok(names) => names,
@@ -872,10 +921,16 @@ pub fn derive_to_ply(input: TokenStream) -> TokenStream {
     for field in fields {
         let field_name = &field.ident;
         let field_type = &field.ty;
-        let ply_names = match parse_ply_name(field) {
-            Ok(names) => names,
+        let ply_attr = match parse_ply_attr(field) {
+            Ok(attr) => attr,
             Err(err) => return TokenStream::from(err.to_compile_error()),
         };
+
+        if let Err(err) = validate_ply_attr_supported_by_macro(field, &ply_attr, "ToPly", false, false) {
+            return TokenStream::from(err.to_compile_error());
+        }
+
+        let ply_names = ply_attr.names;
         let ply_names = match validate_and_dedupe_ply_names(field, ply_names, &mut seen_names) {
             Ok(names) => names,
             Err(err) => return TokenStream::from(err.to_compile_error()),

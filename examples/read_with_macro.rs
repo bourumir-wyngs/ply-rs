@@ -12,7 +12,7 @@ struct Vertex {
 #[derive(Debug, Default, PlyRead)]
 struct Face {
     // we use maximum details
-    #[ply(name = "vertex_indices", type = "uint", count = "uchar")]
+    #[ply(name = "vertex_indices", type = "uint")]
     indices: Vec<u32>,
 }
 
