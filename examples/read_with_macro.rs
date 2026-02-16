@@ -49,6 +49,7 @@ fn print_ply_data(mesh: &Mesh) {
 }
 
 fn main() {
+    // We can read with diverse field types.
     let mesh = read_mesh("example_plys/diverse_field_formats/doubles_ints.ply");
     print_ply_data(&mesh);
     let mesh = read_mesh("example_plys/diverse_field_formats/doubles_shorts.ply");

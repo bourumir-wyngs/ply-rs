@@ -80,11 +80,46 @@ fn test_write_read_tetrahedron_macros() {
     assert_eq!(mesh, read_mesh);
 }
 ```
-## Data types
-Standard PLY data types are: `char (i8), uchar (u8), short (i16), ushort (u16), int (i32), uint (u32), float (f32), double (f64)`. Types like `u64, i64, u128`, and `i128` that this library supports are not part of the official standard and are considered extensions in some implementations.  
+## Data Types
 
-Example [colors_normals_cameras.rs](examples/colors_normals_cameras.rs) shows how to define read/write data beyond vertices and faces.
+The macro-based reader inspects the PLY header and reads the actual data types from the file, converting them into the corresponding Rust types in your data structure when necessary.
 
-The old 3.x.x API is not removed and remains available if preferred. See [write_tetrahedron.rs](examples/write_tetrahedron.rs) and [read_diverse_field_types.rs](examples/read_diverse_field_types.rs) for how to use it. 
+However, if you already know which data types are most likely used in your PLY files, it is still beneficial to specify them explicitly for better performance.
 
-This implementation is mainly based on [these specifications](http://paulbourke.net/dataformats/ply/) with additions from [here](https://people.sc.fsu.edu/%7Ejburkardt/data/ply/ply.txt).
+The writer relies on the declared type to determine how values should be encoded in the output file. If the `type` attribute is not specified, it is automatically inferred from the Rust field type.
+
+Standard PLY data types are:  
+`char (i8), uchar (u8), short (i16), ushort (u16), int (i32), uint (u32), float (f32), double (f64)`.
+
+Types such as `u64`, `i64`, `u128`, and `i128` are supported by this library but are not part of the official PLY specification. They are considered extensions and may not be supported by all implementations.
+
+## Synonyms
+
+To support multiple possible field names (allowing diverse PLY files to be read), the `names` attribute accepts a comma-delimited list of synonyms.
+
+```ignorelang
+    #[ply(name = "vertex, vertices")]
+    vertices: Vec<Vertex>,
+```
+
+## Reading Beyond Vertices and Triangles
+
+The example [`colors_normals_cameras.rs`](examples/colors_normals_cameras.rs) demonstrates how to define read/write support for elements beyond vertices and faces.
+
+## Previous API
+
+The legacy 3.x.x API has not been removed and remains available for users who prefer it, although some changes have been introduced (to support possible conversion, array getters now return Cow, not a reference). See the examples:
+
+- [`write_tetrahedron.rs`](examples/write_tetrahedron.rs)
+- [`read_diverse_field_types.rs`](examples/read_diverse_field_types.rs)
+
+for usage details.
+
+---
+
+This implementation is primarily based on the PLY specification available at:  
+http://paulbourke.net/dataformats/ply/
+
+with additional details from:  
+https://people.sc.fsu.edu/%7Ejburkardt/data/ply/ply.txt
+
