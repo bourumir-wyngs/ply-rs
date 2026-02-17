@@ -323,6 +323,12 @@ impl<W: Write> Write for CountingWrite<'_, W> {
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }
+
+    fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+        self.inner.write_all(buf)?;
+         self.bytes += buf.len();
+         Ok(())
+    }
 }
 
 macro_rules! get_prop(
