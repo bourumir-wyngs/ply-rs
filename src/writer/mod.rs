@@ -94,9 +94,11 @@ impl<E: PropertyAccess> Writer<E> {
         out.flush()?;
         Ok(written)
     }
+
     fn write_new_line<T: Write>(&self, out: &mut T) -> Result<usize> {
-        out.write(b"\n")
-    }
+        out.write_all(b"\n")?;
+        Ok(1)
+    }    
 }
 
 /*
