@@ -156,11 +156,14 @@ fn validate_ply_attr_supported_by_macro(
 
 /// Parses the `#[ply(...)]` attributes and returns the PLY property name and optional count type.
 fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
+    let default_name = field.ident.as_ref().unwrap().to_string();
     let mut attr_data = PlyAttr {
-        names: vec![field.ident.as_ref().unwrap().to_string()],
+        names: Vec::new(),
         count_type: None,
         explicit_type: None,
     };
+
+    let mut saw_explicit_name = false;
 
     for attr in &field.attrs {
         if attr.path().is_ident("ply") {
@@ -176,7 +179,15 @@ fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
                     if names.is_empty() {
                         return Err(meta.error("ply name cannot be empty"));
                     }
-                    attr_data.names = names;
+
+                    // Support repeated `name = "..."` entries (either within a single `#[ply(...)]`
+                    // attribute or across multiple `#[ply(...)]` attributes) by collecting all
+                    // provided values as a union. Comma-delimited lists are also supported.
+                    if !saw_explicit_name {
+                        attr_data.names.clear();
+                        saw_explicit_name = true;
+                    }
+                    attr_data.names.extend(names);
                     Ok(())
                 } else if meta.path.is_ident("count") {
                     let value = meta.value()?;
@@ -193,6 +204,10 @@ fn parse_ply_attr(field: &syn::Field) -> Result<PlyAttr, syn::Error> {
                 }
             })?;
         }
+    }
+
+    if !saw_explicit_name {
+        attr_data.names.push(default_name);
     }
 
     Ok(attr_data)

@@ -95,10 +95,18 @@ Types such as `u64`, `i64`, `u128`, and `i128` are supported by this library but
 
 ## Synonyms
 
-To support multiple possible field names (allowing diverse PLY files to be read), the `names` attribute accepts a comma-delimited list of synonyms.
+To support multiple possible field names (allowing diverse PLY files to be read), the `name` sub-attribute accepts a comma-delimited list of synonyms.
 
 ```ignorelang
     #[ply(name = "vertex, vertices")]
+    vertices: Vec<Vertex>,
+```
+
+You can also specify `name = "..."` repeatedly (across multiple `#[ply(...)]` attributes or multiple `name = ...` entries), and all names will be collected:
+
+```ignorelang
+    #[ply(name = "vertex")]
+    #[ply(name = "vertices")]
     vertices: Vec<Vertex>,
 ```
 

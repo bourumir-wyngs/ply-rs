@@ -1,0 +1,7 @@
+error: duplicate ply name: a
+ --> tests/ui/plyread_alias_duplicate_across_repeated_name.rs:5:5
+  |
+5 | /     #[ply(name = "a")]
+6 | |     #[ply(name = "a")]
+7 | |     x: i32,
+  | |__________^

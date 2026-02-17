@@ -11,7 +11,3 @@ help: consider annotating `NotDefault` with `#[derive(Default)]`
  4 + #[derive(Default)]
  5 | struct NotDefault(u8);
    |
-help: add `#![feature(trivial_bounds)]` to the crate attributes to enable
-   |
- 1 + #![feature(trivial_bounds)]
-   |
