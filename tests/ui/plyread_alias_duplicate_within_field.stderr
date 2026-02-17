@@ -1,0 +1,6 @@
+error: duplicate ply name: a
+ --> tests/ui/plyread_alias_duplicate_within_field.rs:5:5
+  |
+5 | /     #[ply(name = "a,a")]
+6 | |     x: i32,
+  | |__________^

@@ -1,0 +1,6 @@
+error: Unsupported explicit type: uinit. Use one of: i8, u8, i16, u16, i32, u32, f32, f64, char, uchar, short, ushort, int, uint, float, double
+ --> tests/ui/plyread_unknown_explicit_type.rs:5:5
+  |
+5 | /     #[ply(type = "uinit")]
+6 | |     foo: u32,
+  | |____________^

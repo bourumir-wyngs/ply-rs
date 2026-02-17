@@ -6,11 +6,12 @@
 //! - [`ScalarType`] / [`PropertyType`] to describe the types declared in the header.
 //! - [`PropertyAccess`] to allow parsing/writing payloads into custom data structures.
 
+use std::borrow::Cow;
+
 /// Scalar type used to encode properties in the payload.
 ///
 /// For the translation to rust types, see individual documentation.
-#[allow(missing_copy_implementations)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ScalarType {
     /// Signed 8 bit integer, rust: `i8`.
     Char,
@@ -34,8 +35,7 @@ pub enum ScalarType {
 ///
 /// There are two possible types: scalars and lists.
 /// Lists are a sequence of scalars with a leading integer value defining how many elements the list contains.
-#[allow(missing_copy_implementations)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PropertyType {
     /// Simple, "one-number" type.
     Scalar(ScalarType),
@@ -150,42 +150,161 @@ pub trait PropertyAccess {
     }
 
     /// Returns the property value as a list of signed 8-bit integers.
-    fn get_list_char(&self, _property_name: &str) -> Option<&[i8]> {
+    fn get_list_char(&self, _property_name: &str) -> Option<Cow<'_, [i8]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 8-bit integers.
-    fn get_list_uchar(&self, _property_name: &str) -> Option<&[u8]> {
+    fn get_list_uchar(&self, _property_name: &str) -> Option<Cow<'_, [u8]>> {
         None
     }
 
     /// Returns the property value as a list of signed 16-bit integers.
-    fn get_list_short(&self, _property_name: &str) -> Option<&[i16]> {
+    fn get_list_short(&self, _property_name: &str) -> Option<Cow<'_, [i16]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 16-bit integers.
-    fn get_list_ushort(&self, _property_name: &str) -> Option<&[u16]> {
+    fn get_list_ushort(&self, _property_name: &str) -> Option<Cow<'_, [u16]>> {
         None
     }
 
     /// Returns the property value as a list of signed 32-bit integers.
-    fn get_list_int(&self, _property_name: &str) -> Option<&[i32]> {
+    fn get_list_int(&self, _property_name: &str) -> Option<Cow<'_, [i32]>> {
         None
     }
 
     /// Returns the property value as a list of unsigned 32-bit integers.
-    fn get_list_uint(&self, _property_name: &str) -> Option<&[u32]> {
+    fn get_list_uint(&self, _property_name: &str) -> Option<Cow<'_, [u32]>> {
         None
     }
 
     /// Returns the property value as a list of 32-bit floating point numbers.
-    fn get_list_float(&self, _property_name: &str) -> Option<&[f32]> {
+    fn get_list_float(&self, _property_name: &str) -> Option<Cow<'_, [f32]>> {
         None
     }
 
     /// Returns the property value as a list of 64-bit floating point numbers.
-    fn get_list_double(&self, _property_name: &str) -> Option<&[f64]> {
+    fn get_list_double(&self, _property_name: &str) -> Option<Cow<'_, [f64]>> {
         None
     }
 }
+
+/// Trait that describes the schema of a property including its type.
+///
+/// This is used by macro-based writing (`#[derive(ToPly)]`) to construct element/property
+/// definitions for the PLY header.
+///
+/// Note: Optional properties (`Option<T>`) are NOT supported for writing because the PLY format
+/// requires every element instance to have a value for every property declared in the header.
+pub trait WriteSchema {
+    /// Returns a list of properties (name and type) expected by this type.
+    fn property_type_schema() -> Vec<(String, PropertyType)>;
+}
+
+/// Helper trait to safely set a value into a field, possibly with conversion.
+pub trait SetProperty<T> {
+    /// Sets the value.
+    fn set(&mut self, val: T);
+}
+
+impl<T> SetProperty<T> for T {
+    fn set(&mut self, val: T) {
+        *self = val;
+    }
+}
+
+impl<T> SetProperty<T> for Option<T> {
+    fn set(&mut self, val: T) {
+        *self = Some(val);
+    }
+}
+
+/// Helper trait to safely get a value from a field, possibly with conversion.
+pub trait GetProperty<T> {
+    /// Gets the value.
+    fn get(&self) -> Option<T>;
+}
+
+impl<T: Copy> GetProperty<T> for T {
+    fn get(&self) -> Option<T> {
+        Some(*self)
+    }
+}
+
+impl<T: Copy> GetProperty<T> for Option<T> {
+    fn get(&self) -> Option<T> {
+        *self
+    }
+}
+
+impl GetProperty<f32> for f64 {
+    fn get(&self) -> Option<f32> {
+        // Reading into `f64` with `#[ply(type = "float")]` originates from an `f32` value,
+        // so converting back to `f32` for `PropertyAccess::get_float()` is lossless relative
+        // to the file representation.
+        Some(*self as f32)
+    }
+}
+
+impl GetProperty<f32> for Option<f64> {
+    fn get(&self) -> Option<f32> {
+        self.as_ref().map(|v| *v as f32)
+    }
+}
+
+// ---- Checked narrowing conversions for the "wide integer" extension ----
+//
+// Property accessors in this crate expose file scalar types as i8/u8/i16/u16/i32/u32/f32/f64.
+// When users store values in wider integer types (i64/u64/i128/u128) we still want
+// `#[derive(PlyWrite)]` to be able to provide values for the schema's `int/uint` fields.
+// These impls allow derived getters to request `i32`/`u32` and receive `None` on overflow.
+
+impl GetProperty<i32> for i64 {
+    fn get(&self) -> Option<i32> {
+        i32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<i32> for i128 {
+    fn get(&self) -> Option<i32> {
+        i32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<u32> for u64 {
+    fn get(&self) -> Option<u32> {
+        u32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<u32> for u128 {
+    fn get(&self) -> Option<u32> {
+        u32::try_from(*self).ok()
+    }
+}
+
+impl GetProperty<i32> for Option<i64> {
+    fn get(&self) -> Option<i32> {
+        self.as_ref().and_then(|v| i32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<i32> for Option<i128> {
+    fn get(&self) -> Option<i32> {
+        self.as_ref().and_then(|v| i32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<u32> for Option<u64> {
+    fn get(&self) -> Option<u32> {
+        self.as_ref().and_then(|v| u32::try_from(*v).ok())
+    }
+}
+
+impl GetProperty<u32> for Option<u128> {
+    fn get(&self) -> Option<u32> {
+        self.as_ref().and_then(|v| u32::try_from(*v).ok())
+    }
+}
+

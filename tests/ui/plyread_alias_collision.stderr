@@ -1,0 +1,6 @@
+error: duplicate ply name: b
+ --> tests/ui/plyread_alias_collision.rs:7:5
+  |
+7 | /     #[ply(name = "c,b")]
+8 | |     y: i32,
+  | |__________^

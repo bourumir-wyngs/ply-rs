@@ -1,6 +1,6 @@
 [package]
 name = "ply-rs-bw"
-version = "3.0.0"
+version = "4.0.0"
 authors = ["Felice Serena <felice@serena-mueller.ch>","Bourumir Wyngs<audrius.meskauskas@gmail.com"]
 repository = "https://github.com/bourumir-wyngs/ply-rs"
 homepage = "https://github.com/bourumir-wyngs/ply-rs"
@@ -19,9 +19,12 @@ edition = "2024"
 indexmap = "^2"
 byteorder = "^1.5"
 peg = "^0.8.5"
+ply-rs-macros = { path = "ply-rs-macros" }
+thiserror = "2.0.18"
 
 [dev-dependencies]
 doc-comment = "^0.3"
+trybuild = "1.0"
 
 [[example]]
 name = "read_ply"
@@ -39,4 +42,10 @@ name = "read_ply_to_structs"
 name = "read_diverse_field_types"
 
 [[example]]
+name = "read_with_macro"
+
+[[example]]
 name = "write_empty_ply"
+
+[[example]]
+name = "colors_normals_cameras"

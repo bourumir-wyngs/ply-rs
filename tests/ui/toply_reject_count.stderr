@@ -1,0 +1,6 @@
+error: `ply(count = ...)` is not supported by `#[derive(ToPly)]`; supported sub-attributes are: `name`
+ --> tests/ui/toply_reject_count.rs:5:5
+  |
+5 | /     #[ply(count = "u8")]
+6 | |     a: Vec<u32>,
+  | |_______________^

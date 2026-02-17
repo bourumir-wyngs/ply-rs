@@ -1,0 +1,6 @@
+error: duplicate ply name: vert
+  --> tests/ui/toply_alias_collision.rs:12:5
+   |
+12 | /     #[ply(name = "edge,vert")]
+13 | |     edges: Vec<Vertex>,
+   | |______________________^

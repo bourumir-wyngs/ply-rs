@@ -9,7 +9,7 @@ fn read_from_bytes(bytes: &[u8]) -> ply::Ply<ply::DefaultElement> {
     ply.unwrap()
 }
 
-fn try_read_from_bytes(bytes: &[u8]) -> std::io::Result<ply::Ply<ply::DefaultElement>> {
+fn try_read_from_bytes(bytes: &[u8]) -> PlyResult<ply::Ply<ply::DefaultElement>> {
     let mut reader = BufReader::new(bytes);
     let p = parser::Parser::<ply::DefaultElement>::new();
     p.read_ply(&mut reader)
@@ -143,7 +143,10 @@ fn read_header_eof_before_end_header_is_error() {
     let mut reader = BufReader::new(&txt[..]);
     let p = parser::Parser::<ply::DefaultElement>::new();
     let err = p.read_header(&mut reader).expect_err("should error");
-    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    match err {
+        PlyError::Parse(_) => (),
+        _ => panic!("Expected Parse error, got {:?}", err),
+    }
 }
 
 #[test]
@@ -151,7 +154,10 @@ fn read_ascii_payload_eof_is_error() {
     // Declares 2 elements but only provides 1 payload line.
     let txt = b"ply\nformat ascii 1.0\nelement point 2\nproperty int x\nend_header\n7\n";
     let err = try_read_from_bytes(txt).expect_err("should error");
-    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    match err {
+        PlyError::Io(e) => assert_eq!(e.kind(), std::io::ErrorKind::UnexpectedEof),
+        _ => panic!("Expected IO error, got {:?}", err),
+    }
 }
 
 #[test]
@@ -164,5 +170,8 @@ fn read_binary_negative_list_length_is_error() {
     // list length = -1 (i32 LE)
     bytes.extend_from_slice(&(-1i32).to_le_bytes());
     let err = try_read_from_bytes(&bytes).expect_err("should error");
-    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    match err {
+        PlyError::Parse(_) => (),
+        _ => panic!("Expected Parse error, got {:?}", err),
+    }
 }

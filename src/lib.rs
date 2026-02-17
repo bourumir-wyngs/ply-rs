@@ -30,7 +30,17 @@ pub mod parser;
 pub mod ply;
 pub mod writer;
 
+extern crate self as ply_rs_bw;
+ 
+pub use ply_rs_macros::{PlyRead, PlyWrite, FromPly, ToPly};
+pub use parser::FromPly;
+pub use writer::ToPly;
+
 mod util;
+/// Errors and Result types.
+pub mod errors;
+
+pub use errors::{PlyError, PlyResult};
 
 #[cfg(test)]
 doc_comment::doctest!("../README.md");

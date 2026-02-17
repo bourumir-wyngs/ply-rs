@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Derive macros now reject unsupported `#[ply(...)]` sub-attributes instead of silently ignoring them (e.g. `ply(count = ...)` on `#[derive(PlyRead)]`).
+- Derive macros no longer treat `isize`/`usize` as PLY scalar types (use fixed-width integer types like `i32`/`u32`/`i64`/`u64` instead).
+- Derive macros now accept repeated `ply(name = "...")` sub-attributes and treat them as a union of aliases (comma-delimited lists are still supported).
+
 ## [3.0.1] - 2026-02-09
 
 ### Changed

@@ -1,0 +1,6 @@
+error: `ply(count = ...)` is not supported by `#[derive(PlyRead)]`; supported sub-attributes are: `name`, `type`
+ --> tests/ui/plyread_reject_count.rs:5:5
+  |
+5 | /     #[ply(count = "u8")]
+6 | |     a: u32,
+  | |__________^

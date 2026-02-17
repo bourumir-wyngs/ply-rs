@@ -1,0 +1,6 @@
+error: ply(type="float") is incompatible with field type Vec<u32>
+ --> tests/ui/plywrite_type_mismatch_vec.rs:5:5
+  |
+5 | /     #[ply(type = "float")]
+6 | |     foo: Vec<u32>,
+  | |_________________^
