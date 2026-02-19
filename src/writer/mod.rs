@@ -480,3 +480,20 @@ impl<E: PropertyAccess> Writer<E> {
         Ok(written)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counting_write_counts_write_and_flush() {
+        let mut inner = Vec::<u8>::new();
+        let mut cw = CountingWrite::new(&mut inner);
+
+        let n = cw.write(b"abc").expect("write should succeed");
+        assert_eq!(n, 3);
+        assert_eq!(cw.bytes, 3);
+        cw.flush().expect("flush should succeed");
+        assert_eq!(&inner, b"abc");
+    }
+}

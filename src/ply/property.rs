@@ -189,3 +189,117 @@ pub trait PropertyAccess {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Dummy;
+
+    impl PropertyAccess for Dummy {
+        fn new() -> Self {
+            Dummy
+        }
+    }
+
+    #[test]
+    fn test_enums() {
+        // ScalarType
+        let _ = ScalarType::Char;
+        let _ = ScalarType::UChar;
+        let _ = ScalarType::Short;
+        let _ = ScalarType::UShort;
+        let _ = ScalarType::Int;
+        let _ = ScalarType::UInt;
+        let _ = ScalarType::Float;
+        let _ = ScalarType::Double;
+
+        // PropertyType
+        let _ = PropertyType::Scalar(ScalarType::Char);
+        let _ = PropertyType::Scalar(ScalarType::UChar);
+        let _ = PropertyType::Scalar(ScalarType::Short);
+        let _ = PropertyType::Scalar(ScalarType::UShort);
+        let _ = PropertyType::Scalar(ScalarType::Int);
+        let _ = PropertyType::Scalar(ScalarType::UInt);
+        let _ = PropertyType::Scalar(ScalarType::Float);
+        let _ = PropertyType::Scalar(ScalarType::Double);
+        let _ = PropertyType::List(ScalarType::UInt, ScalarType::Char);
+
+        // Property
+        let _ = Property::Char(i8::MIN);
+        let _ = Property::UChar(u8::MAX);
+        let _ = Property::Short(i16::MIN);
+        let _ = Property::UShort(u16::MAX);
+        let _ = Property::Int(i32::MIN);
+        let _ = Property::UInt(u32::MAX);
+        let _ = Property::Float(f32::NAN);
+        let _ = Property::Double(f64::NAN);
+        let _ = Property::ListChar(vec![i8::MIN]);
+        let _ = Property::ListUChar(vec![u8::MAX]);
+        let _ = Property::ListShort(vec![i16::MIN]);
+        let _ = Property::ListUShort(vec![u16::MAX]);
+        let _ = Property::ListInt(vec![i32::MIN]);
+        let _ = Property::ListUInt(vec![u32::MAX]);
+        let _ = Property::ListFloat(vec![f32::NAN]);
+        let _ = Property::ListDouble(vec![f64::NAN]);
+    }
+
+    #[test]
+    fn test_property_eq() {
+        assert_eq!(Property::Char(0), Property::Char(0));
+        assert_eq!(Property::UChar(0), Property::UChar(0));
+        assert_eq!(Property::Short(0), Property::Short(0));
+        assert_eq!(Property::UShort(0), Property::UShort(0));
+        assert_eq!(Property::Int(0), Property::Int(0));
+        assert_eq!(Property::UInt(0), Property::UInt(0));
+        assert_eq!(Property::Float(0.0), Property::Float(0.0));
+        assert_eq!(Property::Double(0.0), Property::Double(0.0));
+        assert_eq!(Property::ListChar(vec![]), Property::ListChar(vec![]));
+        assert_eq!(Property::ListUChar(vec![]), Property::ListUChar(vec![]));
+        assert_eq!(Property::ListShort(vec![0]), Property::ListShort(vec![0]));
+        assert_eq!(Property::ListUShort(vec![0]), Property::ListUShort(vec![0]));
+        assert_eq!(Property::ListInt(vec![0]), Property::ListInt(vec![0]));
+        assert_eq!(Property::ListUInt(vec![0]), Property::ListUInt(vec![0]));
+        assert_eq!(Property::ListFloat(vec![0.0]), Property::ListFloat(vec![0.0]));
+        assert_eq!(Property::ListDouble(vec![0.0]), Property::ListDouble(vec![0.0]));
+    }
+
+    #[test]
+    fn test_property_nan_is_not_equal() {
+        // Rust's float equality treats NaN != NaN; since `Property` derives `PartialEq`,
+        // the same semantics apply here.
+        assert_ne!(Property::Float(f32::NAN), Property::Float(f32::NAN));
+        assert_ne!(Property::Double(f64::NAN), Property::Double(f64::NAN));
+        assert_ne!(
+            Property::ListFloat(vec![f32::NAN]),
+            Property::ListFloat(vec![f32::NAN])
+        );
+        assert_ne!(
+            Property::ListDouble(vec![f64::NAN]),
+            Property::ListDouble(vec![f64::NAN])
+        );
+    }
+
+    #[test]
+    fn test_property_access_defaults() {
+        let mut dummy = Dummy::new();
+        dummy.set_property("foo", Property::Char(42));
+
+        assert_eq!(dummy.get_char("foo"), None);
+        assert_eq!(dummy.get_uchar("foo"), None);
+        assert_eq!(dummy.get_short("foo"), None);
+        assert_eq!(dummy.get_ushort("foo"), None);
+        assert_eq!(dummy.get_int("foo"), None);
+        assert_eq!(dummy.get_uint("foo"), None);
+        assert_eq!(dummy.get_float("foo"), None);
+        assert_eq!(dummy.get_double("foo"), None);
+        assert_eq!(dummy.get_list_char("foo"), None);
+        assert_eq!(dummy.get_list_uchar("foo"), None);
+        assert_eq!(dummy.get_list_short("foo"), None);
+        assert_eq!(dummy.get_list_ushort("foo"), None);
+        assert_eq!(dummy.get_list_int("foo"), None);
+        assert_eq!(dummy.get_list_uint("foo"), None);
+        assert_eq!(dummy.get_list_float("foo"), None);
+        assert_eq!(dummy.get_list_double("foo"), None);
+    }
+}

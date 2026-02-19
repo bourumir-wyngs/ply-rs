@@ -208,3 +208,88 @@ impl PropertyDef {
 
 /// The part after `end_header`, contains the main data.
 pub type Payload<E> = KeyMap<Vec<E>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ply::property::ScalarType;
+
+    #[derive(Debug, PartialEq)]
+    struct MockElement;
+
+    impl PropertyAccess for MockElement {
+        fn new() -> Self {
+            MockElement
+        }
+    }
+
+    #[test]
+    fn test_mock_element_new() {
+        let _ = MockElement::new();
+    }
+
+    #[test]
+    fn test_version_display() {
+        let v = Version { major: 1, minor: 0 };
+        assert_eq!(format!("{}", v), "1.0");
+        let v = Version { major: 1, minor: 1 };
+        assert_eq!(format!("{}", v), "1.1");
+    }
+
+    #[test]
+    fn test_encoding_display() {
+        assert_eq!(format!("{}", Encoding::Ascii), "ascii");
+        assert_eq!(
+            format!("{}", Encoding::BinaryBigEndian),
+            "binary_big_endian"
+        );
+        assert_eq!(
+            format!("{}", Encoding::BinaryLittleEndian),
+            "binary_little_endian"
+        );
+    }
+
+    #[test]
+    fn test_header_new() {
+        let h = Header::new();
+        assert_eq!(h.encoding, Encoding::Ascii);
+        assert_eq!(h.version, Version { major: 1, minor: 0 });
+        assert!(h.obj_infos.is_empty());
+        assert!(h.elements.is_empty());
+        assert!(h.comments.is_empty());
+    }
+
+    #[test]
+    fn test_header_default() {
+        assert_eq!(Header::default(), Header::new());
+    }
+
+    #[test]
+    fn test_element_def_new() {
+        let e = ElementDef::new("vertex".to_string());
+        assert_eq!(e.name, "vertex");
+        assert_eq!(e.count, 0);
+        assert!(e.properties.is_empty());
+    }
+
+    #[test]
+    fn test_property_def_new() {
+        let pt = PropertyType::Scalar(ScalarType::Float);
+        let p = PropertyDef::new("x".to_string(), pt.clone());
+        assert_eq!(p.name, "x");
+        assert_eq!(p.data_type, pt);
+    }
+
+    #[test]
+    fn test_ply_new() {
+        let ply = Ply::<MockElement>::new();
+        assert_eq!(ply.header, Header::new());
+        assert!(ply.payload.is_empty());
+    }
+
+    #[test]
+    fn test_ply_default() {
+        let ply = Ply::<MockElement>::default();
+        assert_eq!(ply, Ply::<MockElement>::new());
+    }
+}
