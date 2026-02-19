@@ -65,7 +65,7 @@ checksum = "132dca9b868d927b35b5dd728167b2dee150eb1ad686008fc71ccb298b776fca"
 
 [[package]]
 name = "ply-rs-bw"
-version = "3.0.1"
+version = "3.0.2"
 dependencies = [
  "byteorder",
  "doc-comment",
