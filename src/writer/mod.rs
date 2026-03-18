@@ -447,13 +447,46 @@ impl<E: PropertyAccess> Writer<E> {
                         ScalarType::Float => get_prop!(element.get_list_float(k)).len(),
                         ScalarType::Double => get_prop!(element.get_list_double(k)).len(),
                     };
+                    fn list_len_too_large(index_type: ScalarType, vec_len: usize) -> io::Error {
+                        io::Error::new(
+                            ErrorKind::InvalidInput,
+                            format!(
+                                "List length {} exceeds index type {:?}.",
+                                vec_len, index_type
+                            ),
+                        )
+                    }
                     written += match *index_type {
-                        ScalarType::Char => {out.write_i8(vec_len as i8)?; 1},
-                        ScalarType::UChar => {out.write_u8(vec_len as u8)?; 1},
-                        ScalarType::Short => {out.write_i16::<B>(vec_len as i16)?; 2},
-                        ScalarType::UShort => {out.write_u16::<B>(vec_len as u16)?; 2},
-                        ScalarType::Int => {out.write_i32::<B>(vec_len as i32)?; 4},
-                        ScalarType::UInt => {out.write_u32::<B>(vec_len as u32)?; 4},
+                        ScalarType::Char => {
+                            let n = i8::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Char, vec_len))?;
+                            out.write_i8(n)?;
+                            1
+                        },
+                        ScalarType::UChar => {
+                            let n = u8::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UChar, vec_len))?;
+                            out.write_u8(n)?;
+                            1
+                        },
+                        ScalarType::Short => {
+                            let n = i16::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Short, vec_len))?;
+                            out.write_i16::<B>(n)?;
+                            2
+                        },
+                        ScalarType::UShort => {
+                            let n = u16::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UShort, vec_len))?;
+                            out.write_u16::<B>(n)?;
+                            2
+                        },
+                        ScalarType::Int => {
+                            let n = i32::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Int, vec_len))?;
+                            out.write_i32::<B>(n)?;
+                            4
+                        },
+                        ScalarType::UInt => {
+                            let n = u32::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UInt, vec_len))?;
+                            out.write_u32::<B>(n)?;
+                            4
+                        },
                         ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in PropertyType.")),
                         ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in PropertyType.")),
                     };
