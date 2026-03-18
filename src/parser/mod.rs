@@ -13,6 +13,8 @@ use self::ply_grammar::grammar;
 use self::ply_grammar::Line;
 use crate::util::LocationTracker;
 
+const MAX_PREALLOCATED_SIZE: usize = 65_536;
+
 fn parse_ascii_rethrow<T, E: Debug>(location: &LocationTracker, line_str: &str, e: E, message: &str) -> Result<T> {
     Err(io::Error::new(
         ErrorKind::InvalidInput,
@@ -113,6 +115,24 @@ impl<E: PropertyAccess> Parser<E> {
     /// To get started quickly try `DefaultElement` from the `ply` module.
     pub fn new() -> Self {
         Parser { phantom: PhantomData }
+    }
+
+    fn ceil_div(&self, dividend: usize, divisor: usize) -> usize {
+        debug_assert!(divisor != 0);
+        dividend / divisor + usize::from(dividend % divisor != 0)
+    }
+
+    fn cap_preallocated_size(&self, requested_size: usize) -> usize {
+        if requested_size <= MAX_PREALLOCATED_SIZE {
+            return requested_size;
+        }
+
+        let minimum_growth_factor = self.ceil_div(requested_size, MAX_PREALLOCATED_SIZE);
+        let growth_factor = minimum_growth_factor
+            .checked_next_power_of_two()
+            .unwrap_or(usize::MAX);
+
+        self.ceil_div(requested_size, growth_factor).min(MAX_PREALLOCATED_SIZE)
     }
 
     /// Expects the complete content of a PLY file.
@@ -354,7 +374,7 @@ use std::error;
 /// # Ascii
 impl<E: PropertyAccess> Parser<E> {
     fn __read_ascii_payload_for_element<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
-        let mut elems = Vec::<E>::with_capacity(element_def.count);
+        let mut elems = Vec::<E>::with_capacity(self.cap_preallocated_size(element_def.count));
         // Pre-allocate a reasonably sized buffer to avoid frequent growth for typical lines
         let mut line_str = String::with_capacity(128);
         for i in 0..element_def.count {
@@ -449,7 +469,7 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
-        let mut out: Vec<D> = Vec::with_capacity(count);
+        let mut out: Vec<D> = Vec::with_capacity(self.cap_preallocated_size(count));
         for i in 0..count {
             let s = match elem_iter.next() {
                 Some(s) => s,
@@ -516,7 +536,7 @@ impl<E: PropertyAccess> Parser<E> {
     }
 
     fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
-        let mut elems = Vec::<E>::with_capacity(element_def.count);
+        let mut elems = Vec::<E>::with_capacity(self.cap_preallocated_size(element_def.count));
         location.next_line();
         for i in 0..element_def.count {
             let element = self
@@ -626,7 +646,7 @@ impl<E: PropertyAccess> Parser<E> {
     }
     fn __read_binary_list<T: Read, D: FromStr>(&self, reader: &mut T, read_from: &dyn Fn(&mut T) -> Result<D>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
-        let mut list = Vec::<D>::with_capacity(count);
+        let mut list = Vec::<D>::with_capacity(self.cap_preallocated_size(count));
         for i in 0..count {
             let value : D = match read_from(reader) {
                 Err(e) => return Err(io::Error::new(
@@ -716,6 +736,18 @@ mod tests {
         let mut bytes = txt.as_bytes();
         let p = Parser::<DefaultElement>::new();
         assert_ok!(p.read_ply(&mut bytes));
+    }
+    #[test]
+    fn cap_preallocated_size_caps_large_requests() {
+        let p = Parser::<DefaultElement>::new();
+
+        assert_eq!(p.cap_preallocated_size(0), 0);
+        assert_eq!(p.cap_preallocated_size(4), 4);
+        assert_eq!(p.cap_preallocated_size(65_536), 65_536);
+        assert_eq!(p.cap_preallocated_size(65_537), 32_769);
+        assert_eq!(p.cap_preallocated_size(100_000), 50_000);
+        assert_eq!(p.cap_preallocated_size(1_048_577), 32_769);
+        assert_eq!(p.cap_preallocated_size(usize::MAX), 65_536);
     }
     #[test]
     fn read_property_ok() {
