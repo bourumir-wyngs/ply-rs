@@ -344,11 +344,12 @@ impl<E: PropertyAccess> Writer<E> {
     pub fn write_ascii_element<T: Write>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
         let mut written = 0;
         let mut p_iter = element_def.properties.iter();
-        let (_k, prop_type) = p_iter.next().unwrap();
-        written += self.write_ascii_property(out, element, prop_type)?;
-        for (_name, prop_type) in p_iter {
-            written += out.write(" ".as_bytes())?;
+        if let Some((_k, prop_type)) = p_iter.next() {
             written += self.write_ascii_property(out, element, prop_type)?;
+            for (_name, prop_type) in p_iter {
+                written += out.write(" ".as_bytes())?;
+                written += self.write_ascii_property(out, element, prop_type)?;
+            }
         }
         written += self.write_new_line(out)?;
         Ok(written)
@@ -484,6 +485,7 @@ impl<E: PropertyAccess> Writer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ply::{DefaultElement, ElementDef};
 
     #[test]
     fn counting_write_counts_write_and_flush() {
@@ -495,5 +497,20 @@ mod tests {
         assert_eq!(cw.bytes, 3);
         cw.flush().expect("flush should succeed");
         assert_eq!(&inner, b"abc");
+    }
+
+    #[test]
+    fn write_ascii_element_with_no_properties_writes_only_newline() {
+        let writer = Writer::<DefaultElement>::new();
+        let element = DefaultElement::new();
+        let element_def = ElementDef::new("empty".to_string());
+        let mut out = Vec::<u8>::new();
+
+        let written = writer
+            .write_ascii_element(&mut out, &element, &element_def)
+            .expect("writing empty ascii element should succeed");
+
+        assert_eq!(written, 1);
+        assert_eq!(out, b"\n");
     }
 }
