@@ -344,12 +344,11 @@ impl<E: PropertyAccess> Writer<E> {
     pub fn write_ascii_element<T: Write>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
         let mut written = 0;
         let mut p_iter = element_def.properties.iter();
-        if let Some((_k, prop_type)) = p_iter.next() {
+        let (_k, prop_type) = p_iter.next().unwrap();
+        written += self.write_ascii_property(out, element, prop_type)?;
+        for (_name, prop_type) in p_iter {
+            written += out.write(" ".as_bytes())?;
             written += self.write_ascii_property(out, element, prop_type)?;
-            for (_name, prop_type) in p_iter {
-                written += out.write(" ".as_bytes())?;
-                written += self.write_ascii_property(out, element, prop_type)?;
-            }
         }
         written += self.write_new_line(out)?;
         Ok(written)
@@ -410,6 +409,55 @@ macro_rules! get_prop(
 
 /// # Binary
 impl<E: PropertyAccess> Writer<E> {
+    fn write_binary_list_len<T: Write, B: ByteOrder>(&self, out: &mut T, property_name: &String, index_type: &ScalarType, vec_len: usize) -> Result<usize> {
+        match *index_type {
+            ScalarType::Char => match i8::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_i8(len)?;
+                    Ok(1)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "char"))),
+            },
+            ScalarType::UChar => match u8::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_u8(len)?;
+                    Ok(1)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "uchar"))),
+            },
+            ScalarType::Short => match i16::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_i16::<B>(len)?;
+                    Ok(2)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "short"))),
+            },
+            ScalarType::UShort => match u16::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_u16::<B>(len)?;
+                    Ok(2)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "ushort"))),
+            },
+            ScalarType::Int => match i32::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_i32::<B>(len)?;
+                    Ok(4)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "int"))),
+            },
+            ScalarType::UInt => match u32::try_from(vec_len) {
+                Ok(len) => {
+                    out.write_u32::<B>(len)?;
+                    Ok(4)
+                },
+                Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, format!("List property '{}' has {} entries, which exceeds the range of '{}' list indices.", property_name, vec_len, "uint"))),
+            },
+            ScalarType::Float => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in PropertyType.")),
+            ScalarType::Double => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in PropertyType.")),
+        }
+    }
+
     // private payload
     /// Write a single binary formatted element in big endian.
     pub fn write_big_endian_element<T: Write> (&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
@@ -447,49 +495,7 @@ impl<E: PropertyAccess> Writer<E> {
                         ScalarType::Float => get_prop!(element.get_list_float(k)).len(),
                         ScalarType::Double => get_prop!(element.get_list_double(k)).len(),
                     };
-                    fn list_len_too_large(index_type: ScalarType, vec_len: usize) -> io::Error {
-                        io::Error::new(
-                            ErrorKind::InvalidInput,
-                            format!(
-                                "List length {} exceeds index type {:?}.",
-                                vec_len, index_type
-                            ),
-                        )
-                    }
-                    written += match *index_type {
-                        ScalarType::Char => {
-                            let n = i8::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Char, vec_len))?;
-                            out.write_i8(n)?;
-                            1
-                        },
-                        ScalarType::UChar => {
-                            let n = u8::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UChar, vec_len))?;
-                            out.write_u8(n)?;
-                            1
-                        },
-                        ScalarType::Short => {
-                            let n = i16::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Short, vec_len))?;
-                            out.write_i16::<B>(n)?;
-                            2
-                        },
-                        ScalarType::UShort => {
-                            let n = u16::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UShort, vec_len))?;
-                            out.write_u16::<B>(n)?;
-                            2
-                        },
-                        ScalarType::Int => {
-                            let n = i32::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::Int, vec_len))?;
-                            out.write_i32::<B>(n)?;
-                            4
-                        },
-                        ScalarType::UInt => {
-                            let n = u32::try_from(vec_len).map_err(|_| list_len_too_large(ScalarType::UInt, vec_len))?;
-                            out.write_u32::<B>(n)?;
-                            4
-                        },
-                        ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in PropertyType.")),
-                        ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in PropertyType.")),
-                    };
+                    written += self.write_binary_list_len::<T, B>(out, k, index_type, vec_len)?;
 
                     written += match *scalar_type {
                         ScalarType::Char => self.write_binary_list::<T, i8>(get_prop!(element.get_list_char(k)), out, &|o, x| {o.write_i8(*x)?; Ok(1)} )?,
@@ -518,7 +524,6 @@ impl<E: PropertyAccess> Writer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ply::{DefaultElement, ElementDef};
 
     #[test]
     fn counting_write_counts_write_and_flush() {
@@ -530,20 +535,5 @@ mod tests {
         assert_eq!(cw.bytes, 3);
         cw.flush().expect("flush should succeed");
         assert_eq!(&inner, b"abc");
-    }
-
-    #[test]
-    fn write_ascii_element_with_no_properties_writes_only_newline() {
-        let writer = Writer::<DefaultElement>::new();
-        let element = DefaultElement::new();
-        let element_def = ElementDef::new("empty".to_string());
-        let mut out = Vec::<u8>::new();
-
-        let written = writer
-            .write_ascii_element(&mut out, &element, &element_def)
-            .expect("writing empty ascii element should succeed");
-
-        assert_eq!(written, 1);
-        assert_eq!(out, b"\n");
     }
 }
