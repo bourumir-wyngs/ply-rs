@@ -344,11 +344,12 @@ impl<E: PropertyAccess> Writer<E> {
     pub fn write_ascii_element<T: Write>(&self, out: &mut T, element: &E, element_def: &ElementDef) -> Result<usize> {
         let mut written = 0;
         let mut p_iter = element_def.properties.iter();
-        let (_k, prop_type) = p_iter.next().unwrap();
-        written += self.write_ascii_property(out, element, prop_type)?;
-        for (_name, prop_type) in p_iter {
-            written += out.write(" ".as_bytes())?;
+        if let Some((_k, prop_type)) = p_iter.next() {
             written += self.write_ascii_property(out, element, prop_type)?;
+            for (_name, prop_type) in p_iter {
+                written += out.write(" ".as_bytes())?;
+                written += self.write_ascii_property(out, element, prop_type)?;
+            }
         }
         written += self.write_new_line(out)?;
         Ok(written)

@@ -129,6 +129,28 @@ fn write_list_elements() {
     assert_eq!(ply, new_ply);
 }
 
+#[test]
+fn write_ascii_element_with_no_properties() {
+    let mut ply = Ply::new();
+    ply.header.encoding = Encoding::Ascii;
+
+    let empty_element = ElementDef::new("empty".to_string());
+    ply.header.elements.add(empty_element);
+
+    ply.payload.insert("empty".to_string(), vec![KeyMap::new()]);
+    ply.make_consistent().expect("test setup should produce consistent ply");
+
+    let mut out = Vec::<u8>::new();
+    let writer = writer::Writer::<DefaultElement>::new();
+    writer
+        .write_ply_unchecked(&mut out, &ply)
+        .expect("empty element definitions should be serialized without panic");
+
+    let mut buff = BufReader::new(&*out);
+    let parsed = read_buff(&mut buff);
+    assert_eq!(parsed, ply);
+}
+
 // Helper function for binary write-read round-trip tests
 fn read_write_binary_ply(ply: &Ply, encoding: Encoding) -> Ply {
     println!("writing ply with encoding {:?}:\n{:?}", encoding, ply);
