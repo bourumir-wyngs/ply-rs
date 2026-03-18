@@ -1,6 +1,6 @@
 use ply_rs_bw::*;
 use ply_rs_bw::ply::*;
-use std::io::{ Read, BufReader };
+use std::io::{ BufReader, ErrorKind, Read };
 
 type Ply = ply::Ply<DefaultElement>;
 
@@ -199,6 +199,34 @@ fn write_binary_big_endian_list_elements() {
     let ply = create_list_elements();
     let new_ply = read_write_binary_ply(&ply, Encoding::BinaryBigEndian);
     assert_eq!(ply.payload, new_ply.payload);
+}
+
+#[test]
+fn write_binary_rejects_list_length_overflow_for_index_type() {
+    let mut ply = Ply::new();
+    ply.header.encoding = Encoding::BinaryLittleEndian;
+
+    let mut e = ElementDef::new("face".to_string());
+    e.properties.add(PropertyDef::new(
+        "vertex_indices".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::UChar),
+    ));
+    ply.header.elements.add(e);
+
+    let mut face = KeyMap::new();
+    face.insert(
+        "vertex_indices".to_string(),
+        Property::ListUChar((0..=255).collect()),
+    );
+    ply.payload.insert("face".to_string(), vec![face]);
+    ply.make_consistent().expect("test setup should produce consistent ply");
+
+    let mut out = Vec::<u8>::new();
+    let writer = writer::Writer::<DefaultElement>::new();
+    let err = writer
+        .write_ply_unchecked(&mut out, &ply)
+        .expect_err("oversized list length should be rejected");
+    assert_eq!(err.kind(), ErrorKind::InvalidInput);
 }
 
 // ============================================================================
