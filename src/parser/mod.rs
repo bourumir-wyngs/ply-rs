@@ -269,7 +269,10 @@ impl<E: PropertyAccess> Parser<E> {
 }
 
 // use ply::{ Header, Encoding };
-use crate::ply::{Addable, Comment, ElementDef, KeyMap, ObjInfo, PropertyAccess, PropertyAccessResult, Version};
+use crate::ply::{
+    Addable, BeginList, Comment, ElementDef, KeyMap, ObjInfo, PropertyAccess, PropertyAccessResult,
+    Version,
+};
 /*
 use util::LocationTracker;
 use super::Parser;
@@ -627,94 +630,158 @@ impl<E: PropertyAccess> Parser<E> {
             PropertyType::List(_, ref scalar_type) => {
                 let count: usize = self.parse(s)?;
                 match *scalar_type {
-                    ScalarType::Char => {
-                        if let Some(list) = vals.begin_list_char(property_name, count) {
+                    ScalarType::Char => match vals.begin_list_char(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_char(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UChar => {
-                        if let Some(list) = vals.begin_list_uchar(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UChar => match vals.begin_list_uchar(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_uchar(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Short => {
-                        if let Some(list) = vals.begin_list_short(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Short => match vals.begin_list_short(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_short(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UShort => {
-                        if let Some(list) = vals.begin_list_ushort(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UShort => match vals.begin_list_ushort(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_ushort(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Int => {
-                        if let Some(list) = vals.begin_list_int(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Int => match vals.begin_list_int(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_int(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UInt => {
-                        if let Some(list) = vals.begin_list_uint(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UInt => match vals.begin_list_uint(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_uint(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Float => {
-                        if let Some(list) = vals.begin_list_float(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Float => match vals.begin_list_float(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_float(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Double => {
-                        if let Some(list) = vals.begin_list_double(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Double => match vals.begin_list_double(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = vals.set_list_double(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
                 }
             }
         }
@@ -942,134 +1009,198 @@ impl<E: PropertyAccess> Parser<E> {
             PropertyType::List(ref index_type, ref property_type) => {
                 let count = self.__read_binary_list_count::<T, B>(reader, index_type)?;
                 match *property_type {
-                    ScalarType::Char => {
-                        if let Some(list) = raw_element.begin_list_char(property_name, count) {
+                    ScalarType::Char => match raw_element.begin_list_char(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_i8()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_char(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i8()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UChar => {
-                        if let Some(list) = raw_element.begin_list_uchar(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UChar => match raw_element.begin_list_uchar(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_u8()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_uchar(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u8()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Short => {
-                        if let Some(list) = raw_element.begin_list_short(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Short => match raw_element.begin_list_short(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_i16::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_short(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i16::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UShort => {
-                        if let Some(list) = raw_element.begin_list_ushort(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UShort => match raw_element.begin_list_ushort(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_u16::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_ushort(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u16::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Int => {
-                        if let Some(list) = raw_element.begin_list_int(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Int => match raw_element.begin_list_int(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_i32::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_int(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i32::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::UInt => {
-                        if let Some(list) = raw_element.begin_list_uint(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::UInt => match raw_element.begin_list_uint(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_u32::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_uint(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u32::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Float => {
-                        if let Some(list) = raw_element.begin_list_float(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Float => match raw_element.begin_list_float(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_f32::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_float(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_f32::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
-                    ScalarType::Double => {
-                        if let Some(list) = raw_element.begin_list_double(property_name, count) {
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
+                    ScalarType::Double => match raw_element.begin_list_double(property_name, count) {
+                        BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
                                 |r| Ok(r.read_f64::<B>()?),
                                 count,
                                 list,
                             )?;
-                        } else {
+                        }
+                        BeginList::UseSetter => {
                             let result = raw_element.set_list_double(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_f64::<B>()?), count)?,
                             );
                             self.__handle_property_access_result(property_name, data_type, result)?;
                         }
-                    }
+                        BeginList::UnsupportedType => {
+                            self.__handle_property_access_result(
+                                property_name,
+                                data_type,
+                                PropertyAccessResult::UnsupportedType,
+                            )?;
+                        }
+                    },
                 }
             }
         }

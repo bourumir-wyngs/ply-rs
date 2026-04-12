@@ -227,6 +227,19 @@ pub enum PropertyAccessResult {
     UnsupportedType,
 }
 
+/// Where the parser should store values for a list property.
+///
+/// Returned by [`PropertyAccess::begin_list_char`] and the other `begin_list_*` hooks.
+#[derive(Debug)]
+pub enum BeginList<'a, T> {
+    /// Fast path: the parser clears and fills this vector in place.
+    Fill(&'a mut Vec<T>),
+    /// The parser builds a temporary [`Vec`] and calls the matching `set_list_*` method.
+    UseSetter,
+    /// Same meaning as [`PropertyAccessResult::UnsupportedType`] for scalar and `set_list_*` paths.
+    UnsupportedType,
+}
+
 /// Provides setters and getters for the Parser and the Writer.
 ///
 /// This trait allows you to create your own data structure for the case that the
@@ -240,6 +253,9 @@ pub enum PropertyAccessResult {
 /// [`Property`] construction and, for list properties, fill your destination `Vec` directly.
 /// Returning [`PropertyAccessResult::UnsupportedType`] from a setter causes the parser to
 /// surface an `InvalidData` error with property context.
+/// List [`begin_list_*`](Self::begin_list_char) hooks return [`BeginList`], which can also
+/// carry [`BeginList::UnsupportedType`] so the fast in-place list path can fail without building
+/// a temporary [`Vec`].
 ///
 /// The getters are named in congruence with `PropertyType` and `ScalarType`.
 pub trait PropertyAccess {
@@ -333,60 +349,46 @@ pub trait PropertyAccess {
         self.set_property(property_name, Property::ListDouble(value))
     }
 
-    /// Returns mutable access to the destination storage for a signed 8-bit list property.
+    /// Selects destination storage for a signed 8-bit list property.
     ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_char(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i8>> {
-        None
+    /// For [`BeginList::Fill`], the parser clears and refills the returned vector.
+    fn begin_list_char(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, i8> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for an unsigned 8-bit list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_uchar(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u8>> {
-        None
+    /// Selects destination storage for an unsigned 8-bit list property.
+    fn begin_list_uchar(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, u8> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for a signed 16-bit list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_short(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i16>> {
-        None
+    /// Selects destination storage for a signed 16-bit list property.
+    fn begin_list_short(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, i16> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for an unsigned 16-bit list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_ushort(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u16>> {
-        None
+    /// Selects destination storage for an unsigned 16-bit list property.
+    fn begin_list_ushort(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, u16> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for a signed 32-bit list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_int(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i32>> {
-        None
+    /// Selects destination storage for a signed 32-bit list property.
+    fn begin_list_int(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, i32> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for an unsigned 32-bit list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_uint(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u32>> {
-        None
+    /// Selects destination storage for an unsigned 32-bit list property.
+    fn begin_list_uint(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, u32> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for a 32-bit floating point list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_float(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<f32>> {
-        None
+    /// Selects destination storage for a 32-bit floating point list property.
+    fn begin_list_float(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, f32> {
+        BeginList::UseSetter
     }
 
-    /// Returns mutable access to the destination storage for a 64-bit floating point list property.
-    ///
-    /// The parser clears and refills the returned vector.
-    fn begin_list_double(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<f64>> {
-        None
+    /// Selects destination storage for a 64-bit floating point list property.
+    fn begin_list_double(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, f64> {
+        BeginList::UseSetter
     }
 
     /// Returns the property value as a signed 8-bit integer (`char`).
@@ -584,6 +586,8 @@ mod tests {
         assert_eq!(dummy.get_list_uint("foo"), None);
         assert_eq!(dummy.get_list_float("foo"), None);
         assert_eq!(dummy.get_list_double("foo"), None);
+
+        assert!(matches!(dummy.begin_list_int("foo", 0), BeginList::UseSetter));
     }
 
     #[test]

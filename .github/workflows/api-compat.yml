@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   semver:
-    name: cargo-semver-checks (vs released 4.0.0)
+    name: cargo-semver-checks (vs tag 4.0.0)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,4 +27,5 @@ jobs:
       - name: Check public API compatibility
         uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
-          baseline-version: 4.0.0
+          # Baseline is the git tag (not crates.io), so CI passes before the crate is published.
+          baseline-rev: 4.0.0

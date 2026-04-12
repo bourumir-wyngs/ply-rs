@@ -451,8 +451,12 @@ impl PropertyAccess for DirectParseElem {
         }
     }
 
-    fn begin_list_int(&mut self, property_name: &str, _len: usize) -> Option<&mut Vec<i32>> {
-        (property_name == "labels").then_some(&mut self.labels)
+    fn begin_list_int(&mut self, property_name: &str, _len: usize) -> BeginList<'_, i32> {
+        if property_name == "labels" {
+            BeginList::Fill(&mut self.labels)
+        } else {
+            BeginList::UseSetter
+        }
     }
 }
 
@@ -527,4 +531,45 @@ fn parser_reports_unsupported_destination_property_types() {
     let err = p.read_ascii_element("1.5", &def).expect_err("should fail");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(err.to_string().contains("PLY property 'x'"));
+}
+
+#[derive(Debug)]
+struct RejectListIntBeginElem;
+
+impl PropertyAccess for RejectListIntBeginElem {
+    fn new() -> Self {
+        Self
+    }
+
+    fn begin_list_int(&mut self, property_name: &str, _len: usize) -> BeginList<'_, i32> {
+        match property_name {
+            "labels" => BeginList::UnsupportedType,
+            other => panic!("unexpected list property: {other}"),
+        }
+    }
+}
+
+#[test]
+fn parser_reports_unsupported_list_via_begin_list_ascii() {
+    let p = parser::Parser::<RejectListIntBeginElem>::new();
+    let err = p
+        .read_ascii_element("1.5 3 1 2 3", &optimized_elem_def())
+        .expect_err("should fail");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("PLY property 'labels'"));
+}
+
+#[test]
+fn parser_reports_unsupported_list_via_begin_list_binary() {
+    let p = parser::Parser::<RejectListIntBeginElem>::new();
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&1.5f32.to_le_bytes());
+    bytes.push(3);
+
+    let mut cur = Cursor::new(bytes);
+    let err = p
+        .read_little_endian_element(&mut cur, &optimized_elem_def())
+        .expect_err("should fail");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("PLY property 'labels'"));
 }

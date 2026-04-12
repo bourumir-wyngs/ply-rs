@@ -5,6 +5,7 @@
 
 use super::KeyMap;
 use super::Property;
+use super::BeginList;
 use super::PropertyAccess;
 use super::PropertyAccessResult;
 
@@ -23,13 +24,13 @@ macro_rules! get(
 );
 macro_rules! begin_list {
     ($name:ident, $variant:ident, $ty:ty) => {
-        fn $name(&mut self, key: &str, _len: usize) -> Option<&mut Vec<$ty>> {
+        fn $name(&mut self, key: &str, _len: usize) -> BeginList<'_, $ty> {
             if !self.contains_key(key) {
                 self.insert(key.to_string(), Property::$variant(Vec::new()));
             }
             match self.get_mut(key) {
-                Some(Property::$variant(values)) => Some(values),
-                _ => None,
+                Some(Property::$variant(values)) => BeginList::Fill(values),
+                _ => BeginList::UseSetter,
             }
         }
     };
