@@ -844,7 +844,6 @@ impl<E: PropertyAccess> Parser<E> {
         element_def: &ElementDef,
     ) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(self.cap_preallocated_size(element_def.count));
-        location.next_line();
         for i in 0..element_def.count {
             let element = self
                 .__read_binary_element::<T, B>(reader, element_def)

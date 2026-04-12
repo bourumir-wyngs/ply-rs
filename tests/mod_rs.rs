@@ -92,6 +92,30 @@ end_header\n\
 }
 
 #[test]
+fn parser_split_reader_reports_file_relative_binary_payload_lines() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(
+        b"ply\n\
+format binary_little_endian 1.0\n\
+element point 2\n\
+property int x\n\
+end_header\n",
+    );
+    bytes.extend_from_slice(&7i32.to_le_bytes());
+
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = p.read_header(&mut reader).expect("header should parse");
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.line(), Some(7));
+    assert!(err.to_string().contains("Line 7:"));
+}
+
+#[test]
 fn parser_split_reader_keeps_line_numbers_across_multiple_elements() {
     let bytes = b"ply\n\
 format ascii 1.0\n\
@@ -124,6 +148,39 @@ end_header\n\
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(err.line(), Some(9));
     assert!(err.to_string().contains("Line 9:"));
+}
+
+#[test]
+fn parser_split_reader_keeps_binary_line_numbers_across_zero_count_elements() {
+    let bytes = b"ply\n\
+format binary_little_endian 1.0\n\
+element vertex 0\n\
+property int x\n\
+element face 1\n\
+property int y\n\
+end_header\n";
+
+    let vertex_parser = parser::Parser::<DefaultElement>::new();
+    let face_parser = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = vertex_parser
+        .read_header(&mut reader)
+        .expect("header should parse");
+    let vertex_element = header.elements.get("vertex").expect("vertex element");
+    let face_element = header.elements.get("face").expect("face element");
+
+    let vertices = vertex_parser
+        .read_payload_for_element(&mut reader, vertex_element, &header)
+        .expect("vertex payload should parse");
+    assert!(vertices.is_empty());
+
+    let err = face_parser
+        .read_payload_for_element(&mut reader, face_element, &header)
+        .expect_err("face payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.line(), Some(8));
+    assert!(err.to_string().contains("Line 8:"));
 }
 
 #[test]
