@@ -109,7 +109,10 @@ impl<T: BufRead> Reader<T> {
         &mut self.inner
     }
 
-    /// Returns the current 1-based line number tracked by the parser.
+    /// Returns the current parser line number.
+    ///
+    /// A fresh reader starts at `0` and advances to `1` before the first
+    /// header or payload line is consumed.
     pub fn line(&self) -> usize {
         self.location.line_index
     }
@@ -458,12 +461,19 @@ impl<E: PropertyAccess> Parser<E> {
 // # Payload
 // //////////////////////
 impl<E: PropertyAccess> Parser<E> {
+    fn __prime_payload_location(location: &mut LocationTracker) {
+        if location.line_index == 0 {
+            location.next_line();
+        }
+    }
+
     /// Reads payload. Encoding is chosen according to the encoding field in `header`.
     pub fn read_payload<T: BufRead>(
         &self,
         reader: &mut Reader<T>,
         header: &Header,
     ) -> Result<Payload<E>> {
+        Self::__prime_payload_location(&mut reader.location);
         self.__read_payload(&mut reader.inner, &mut reader.location, header)
     }
     /// Reads entire list of elements from payload. Encoding is chosen according to `header`.
@@ -475,6 +485,7 @@ impl<E: PropertyAccess> Parser<E> {
         element_def: &ElementDef,
         header: &Header,
     ) -> Result<Vec<E>> {
+        Self::__prime_payload_location(&mut reader.location);
         match header.encoding {
             Encoding::Ascii => self.__read_ascii_payload_for_element(
                 &mut reader.inner,

@@ -1,10 +1,12 @@
-
 /// Tracks the current line number while parsing.
 ///
 /// This is primarily used to add line-context to I/O and parse errors.
 #[derive(Debug, Clone, Copy)]
 pub struct LocationTracker {
     /// Current 1-based line index in the input stream.
+    ///
+    /// A newly created tracker starts at `0` and advances to `1` before the
+    /// first header or payload line is consumed.
     pub line_index: usize,
 }
 

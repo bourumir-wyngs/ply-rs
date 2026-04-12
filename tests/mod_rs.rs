@@ -9,6 +9,26 @@ fn try_read_from_bytes(bytes: &[u8]) -> parser::Result<Ply<DefaultElement>> {
     p.read_ply(&mut reader)
 }
 
+fn single_property_header(
+    encoding: Encoding,
+    element_name: &str,
+    count: usize,
+    property_name: &str,
+    data_type: PropertyType,
+) -> Header {
+    let mut header = Header::new();
+    header.encoding = encoding;
+
+    let mut element = ElementDef::new(element_name.to_string());
+    element.count = count;
+    element
+        .properties
+        .add(PropertyDef::new(property_name.to_string(), data_type));
+    header.elements.add(element);
+
+    header
+}
+
 #[test]
 fn parser_default_and_read_ply_header_ok() {
     let bytes = b"ply\nformat ascii 1.0\nend_header\n";
@@ -69,6 +89,52 @@ property int x\n\
         .read_payload(&mut reader, &header)
         .expect("payload should parse");
     assert_eq!(payload["point"].len(), 1);
+}
+
+#[test]
+fn parser_payload_only_read_payload_starts_lines_at_one() {
+    let header = single_property_header(
+        Encoding::Ascii,
+        "point",
+        1,
+        "x",
+        PropertyType::Scalar(ScalarType::Int),
+    );
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&b"not-an-int\n"[..]));
+
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(err.line(), Some(1));
+    assert!(err.to_string().contains("Line 1:"));
+}
+
+#[test]
+fn parser_payload_only_read_payload_for_element_keeps_later_lines_one_based() {
+    let header = single_property_header(
+        Encoding::BinaryLittleEndian,
+        "point",
+        2,
+        "x",
+        PropertyType::Scalar(ScalarType::Int),
+    );
+    let element_def = header.elements.get("point").expect("point element");
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&7i32.to_le_bytes());
+
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let err = p
+        .read_payload_for_element(&mut reader, element_def, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.line(), Some(2));
+    assert!(err.to_string().contains("Line 2:"));
 }
 
 #[test]
