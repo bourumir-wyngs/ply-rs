@@ -1,30 +1,135 @@
 //! Reads ascii or binary data into a `Ply`.
 
+use std::fmt::{self, Debug, Display, Formatter};
 use std::io;
-use std::io::{ Read, BufReader };
-use std::fmt::Debug;
+use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::result;
-
-use std::io::{ BufRead, Result, ErrorKind };
 
 mod ply_grammar;
 
-use self::ply_grammar::grammar;
 use self::ply_grammar::Line;
+use self::ply_grammar::grammar;
 use crate::util::LocationTracker;
 
 const MAX_PREALLOCATED_SIZE: usize = 65_536;
 
-fn parse_ascii_rethrow<T, E: Debug>(location: &LocationTracker, line_str: &str, e: E, message: &str) -> Result<T> {
-    Err(io::Error::new(
+/// Result type used by parser APIs.
+pub type Result<T> = result::Result<T, ParseError>;
+
+/// Structured parser error with optional file-relative line information.
+#[derive(Debug)]
+pub struct ParseError {
+    kind: ErrorKind,
+    line: Option<usize>,
+    message: String,
+}
+
+impl ParseError {
+    fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            line: None,
+            message: message.into(),
+        }
+    }
+
+    fn with_line(kind: ErrorKind, line: usize, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            line: Some(line),
+            message: message.into(),
+        }
+    }
+
+    /// Returns the underlying error kind.
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
+
+    /// Returns the file-relative 1-based line number, when available.
+    pub fn line(&self) -> Option<usize> {
+        self.line
+    }
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Some(line) = self.line {
+            write!(f, "Line {}: {}", line, self.message)
+        } else {
+            f.write_str(&self.message)
+        }
+    }
+}
+
+impl error::Error for ParseError {}
+
+impl From<io::Error> for ParseError {
+    fn from(error: io::Error) -> Self {
+        Self::new(error.kind(), error.to_string())
+    }
+}
+
+impl From<ParseError> for io::Error {
+    fn from(error: ParseError) -> Self {
+        io::Error::new(error.kind(), error)
+    }
+}
+
+/// Stateful buffered reader used by the incremental parser API.
+#[derive(Debug)]
+pub struct Reader<T: BufRead> {
+    inner: T,
+    location: LocationTracker,
+}
+
+impl<T: BufRead> Reader<T> {
+    /// Wraps a buffered reader while preserving parser state across header and payload reads.
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            location: LocationTracker::new(),
+        }
+    }
+
+    /// Returns a shared reference to the wrapped reader.
+    pub fn get_ref(&self) -> &T {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the wrapped reader.
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+
+    /// Returns the current 1-based line number tracked by the parser.
+    pub fn line(&self) -> usize {
+        self.location.line_index
+    }
+
+    /// Unwraps the reader.
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
+fn parse_ascii_rethrow<T, E: Debug>(
+    location: &LocationTracker,
+    line_str: &str,
+    e: E,
+    message: &str,
+) -> Result<T> {
+    Err(ParseError::with_line(
         ErrorKind::InvalidInput,
-        format!("Line {}: {}\n\tString: '{}'\n\tError: {:?}", location.line_index, message, line_str, e)
+        location.line_index,
+        format!("{message}\n\tString: '{line_str}'\n\tError: {:?}", e),
     ))
 }
 fn parse_ascii_error<T>(location: &LocationTracker, line_str: &str, message: &str) -> Result<T> {
-    Err(io::Error::new(
+    Err(ParseError::with_line(
         ErrorKind::InvalidInput,
-        format!("Line {}: {}\n\tString: '{}'", location.line_index, message, line_str)
+        location.line_index,
+        format!("{message}\n\tString: '{line_str}'"),
     ))
 }
 
@@ -67,8 +172,9 @@ use std::marker::PhantomData;
 /// // let mut f = ... ;
 /// # let path = "example_plys/greg_turk_example1_ok_ascii.ply";
 /// # let f = std::fs::File::open(path).unwrap();
-/// // We need to wrap our `Read` into something providing `BufRead`
-/// let mut buf_read = std::io::BufReader::new(f);
+/// // Wrap the source in a stateful parser reader to preserve diagnostics
+/// // and stream position across header/payload parsing.
+/// let mut buf_read = parser::Reader::new(std::io::BufReader::new(f));
 ///
 /// // create a parser
 /// let p = parser::Parser::<ply::DefaultElement>::new();
@@ -94,7 +200,7 @@ use std::marker::PhantomData;
 ///
 #[derive(Debug)]
 pub struct Parser<E: PropertyAccess> {
-      phantom: PhantomData<E>,
+    phantom: PhantomData<E>,
 }
 
 impl<E: PropertyAccess> Default for Parser<E> {
@@ -103,23 +209,24 @@ impl<E: PropertyAccess> Default for Parser<E> {
     }
 }
 
-
 //use std::marker::PhantomData;
 //use std::io::{ Read, BufReader };
 use crate::ply::Ply;
-use crate::ply::{ Header, Payload, Encoding };
+use crate::ply::{Encoding, Header, Payload};
 
 impl<E: PropertyAccess> Parser<E> {
     /// Creates a new `Parser<E>`, where `E` is the type to store the element data in.
     ///
     /// To get started quickly try `DefaultElement` from the `ply` module.
     pub fn new() -> Self {
-        Parser { phantom: PhantomData }
+        Parser {
+            phantom: PhantomData,
+        }
     }
 
     fn ceil_div(&self, dividend: usize, divisor: usize) -> usize {
         debug_assert!(divisor != 0);
-        dividend / divisor + usize::from(dividend % divisor != 0)
+        dividend / divisor + usize::from(!dividend.is_multiple_of(divisor))
     }
 
     fn cap_preallocated_size(&self, requested_size: usize) -> usize {
@@ -132,7 +239,8 @@ impl<E: PropertyAccess> Parser<E> {
             .checked_next_power_of_two()
             .unwrap_or(usize::MAX);
 
-        self.ceil_div(requested_size, growth_factor).min(MAX_PREALLOCATED_SIZE)
+        self.ceil_div(requested_size, growth_factor)
+            .min(MAX_PREALLOCATED_SIZE)
     }
 
     /// Expects the complete content of a PLY file.
@@ -140,10 +248,9 @@ impl<E: PropertyAccess> Parser<E> {
     /// A PLY file starts with "ply\n". `read_ply` reads until all elements have been read as
     /// defined in the header of the PLY file.
     pub fn read_ply<T: Read>(&self, source: &mut T) -> Result<Ply<E>> {
-        let mut source = BufReader::new(source);
-        let mut location = LocationTracker::new();
-        let header = self.__read_header(&mut source, &mut location)?;
-        let payload = self.__read_payload(&mut source, &mut location, &header)?;
+        let mut reader = Reader::new(BufReader::new(source));
+        let header = self.read_header(&mut reader)?;
+        let payload = self.read_payload(&mut reader, &header)?;
         let mut ply = Ply::new();
         ply.header = header;
         ply.payload = payload;
@@ -153,17 +260,16 @@ impl<E: PropertyAccess> Parser<E> {
     /// Reads only the header portion of a PLY file (up to and including `end_header`).
     ///
     /// If you need to continue reading the payload from the same stream, prefer wrapping
-    /// your reader in a `BufReader` and calling [`Parser::read_header`], because this
+    /// your reader in a [`Reader`] and calling [`Parser::read_header`], because this
     /// method creates an internal `BufReader` which may buffer past `end_header`.
     pub fn read_ply_header<T: Read>(&self, source: &mut T) -> Result<Header> {
-        let mut source = BufReader::new(source);
-        let mut location = LocationTracker::new();
-        self.__read_header(&mut source, &mut location)
+        let mut reader = Reader::new(BufReader::new(source));
+        self.read_header(&mut reader)
     }
 }
 
 // use ply::{ Header, Encoding };
-use crate::ply::{ PropertyAccess, Version, ObjInfo, Comment, ElementDef, KeyMap, Addable };
+use crate::ply::{Addable, Comment, ElementDef, KeyMap, ObjInfo, PropertyAccess, Version};
 /*
 use util::LocationTracker;
 use super::Parser;
@@ -183,9 +289,8 @@ impl<E: PropertyAccess> Parser<E> {
     ///
     /// A PLY file starts with "ply\n". The header and the payload are separated by a line `end_header\n`.
     /// This method reads all header elements up to `end_header`.
-    pub fn read_header<T: BufRead>(&self, reader: &mut T) -> Result<Header> {
-        let mut line = LocationTracker::new();
-        self.__read_header(reader, &mut line)
+    pub fn read_header<T: BufRead>(&self, reader: &mut Reader<T>) -> Result<Header> {
+        self.__read_header(&mut reader.inner, &mut reader.location)
     }
 
     /// Parses a single PLY header line.
@@ -195,33 +300,48 @@ impl<E: PropertyAccess> Parser<E> {
     pub fn read_header_line(&self, line: &str) -> Result<Line> {
         match self.__read_header_line(line) {
             Ok(l) => Ok(l),
-            Err(e) => Err(io::Error::new(
+            Err(e) => Err(ParseError::new(
                 ErrorKind::InvalidInput,
-                format!("Couldn't parse line.\n\tString: {}\n\tError: {:?}", line, e)
+                format!("Couldn't parse line.\n\tString: {}\n\tError: {:?}", line, e),
             )),
         }
     }
 
     // private
-    fn __read_header_line(&self, line_str: &str) -> result::Result<Line, peg::error::ParseError<peg::str::LineCol>> {
+    fn __read_header_line(
+        &self,
+        line_str: &str,
+    ) -> result::Result<Line, peg::error::ParseError<peg::str::LineCol>> {
         grammar::line(line_str)
     }
-    fn __read_header<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker) -> Result<Header> {
+    fn __read_header<T: BufRead>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+    ) -> Result<Header> {
         location.next_line();
         let mut line_str = String::new();
         if reader.read_line(&mut line_str)? == 0 {
-            return Err(io::Error::new(
+            return Err(ParseError::new(
                 ErrorKind::UnexpectedEof,
                 "Unexpected end of file while reading magic number.",
             ));
         }
         match self.__read_header_line(&line_str) {
             Ok(Line::MagicNumber) => (),
-            Ok(l) => return parse_ascii_error(location, &line_str, &format!("Expected magic number 'ply', but saw '{:?}'.", l)),
-            Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Expected magic number 'ply'."),
+            Ok(l) => {
+                return parse_ascii_error(
+                    location,
+                    &line_str,
+                    &format!("Expected magic number 'ply', but saw '{:?}'.", l),
+                );
+            }
+            Err(e) => {
+                return parse_ascii_rethrow(location, &line_str, e, "Expected magic number 'ply'.");
+            }
         }
 
-        let mut header_form_ver : Option<(Encoding, Option<Version>)> = None;
+        let mut header_form_ver: Option<(Encoding, Option<Version>)> = None;
         let mut header_obj_infos = Vec::<ObjInfo>::new();
         let mut header_elements = KeyMap::<ElementDef>::new();
         let mut header_comments = Vec::<Comment>::new();
@@ -229,20 +349,22 @@ impl<E: PropertyAccess> Parser<E> {
         'readlines: loop {
             line_str.clear();
             if reader.read_line(&mut line_str)? == 0 {
-                return Err(io::Error::new(
+                return Err(ParseError::with_line(
                     ErrorKind::UnexpectedEof,
-                    format!(
-                        "Line {}: Unexpected end of file while reading header (missing 'end_header').",
-                        location.line_index
-                    ),
+                    location.line_index,
+                    "Unexpected end of file while reading header (missing 'end_header').",
                 ));
             }
             let line = self.__read_header_line(&line_str);
 
             match line {
-                Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Couldn't parse line."),
-                Ok(Line::MagicNumber) => return parse_ascii_error(location, &line_str, "Unexpected 'ply' found."),
-                Ok(Line::Format(ref t)) =>
+                Err(e) => {
+                    return parse_ascii_rethrow(location, &line_str, e, "Couldn't parse line.");
+                }
+                Ok(Line::MagicNumber) => {
+                    return parse_ascii_error(location, &line_str, "Unexpected 'ply' found.");
+                }
+                Ok(Line::Format(ref t)) => {
                     if let Some(f) = header_form_ver.as_ref() {
                         if f != t {
                             return parse_ascii_error(
@@ -263,35 +385,33 @@ impl<E: PropertyAccess> Parser<E> {
                     } else {
                         header_form_ver = Some(*t);
                     }
-                ,
-                Ok(Line::ObjInfo(ref o)) =>
-                    header_obj_infos.push(o.clone())
-                ,
-                Ok(Line::Comment(ref c)) =>
-                    header_comments.push(c.clone())
-                ,
+                }
+                Ok(Line::ObjInfo(ref o)) => header_obj_infos.push(o.clone()),
+                Ok(Line::Comment(ref c)) => header_comments.push(c.clone()),
                 Ok(Line::Element(ref e)) => {
                     if let Some(e) = e {
                         header_elements.add(e.clone())
                     } else {
                         return parse_ascii_error(location, &line_str, "Invalid element");
                     }
-
-                },
-                Ok(Line::Property(p)) =>
+                }
+                Ok(Line::Property(p)) => {
                     if header_elements.is_empty() {
                         return parse_ascii_error(
                             location,
                             &line_str,
-                            &format!("Property '{:?}' found without preceding element.", p)
+                            &format!("Property '{:?}' found without preceding element.", p),
                         );
                     } else {
                         let (_, mut e) = header_elements.pop().unwrap();
                         e.properties.add(p);
                         header_elements.add(e);
                     }
-                ,
-                Ok(Line::EndHeader) => { location.next_line(); break 'readlines; },
+                }
+                Ok(Line::EndHeader) => {
+                    location.next_line();
+                    break 'readlines;
+                }
             };
             location.next_line();
         }
@@ -299,7 +419,7 @@ impl<E: PropertyAccess> Parser<E> {
         let (encoding, version) = if let Some((encoding, version)) = header_form_ver {
             (encoding, version)
         } else {
-            return Err(io::Error::new(
+            return Err(ParseError::new(
                 ErrorKind::InvalidInput,
                 "No format line found.",
             ));
@@ -308,18 +428,18 @@ impl<E: PropertyAccess> Parser<E> {
         let version = if let Some(version) = version {
             version
         } else {
-            return Err(io::Error::new(
+            return Err(ParseError::new(
                 ErrorKind::InvalidInput,
                 "Invalid version number.",
             ));
         };
 
-        Ok(Header{
+        Ok(Header {
             encoding,
             version,
             obj_infos: header_obj_infos,
             comments: header_comments,
-            elements: header_elements
+            elements: header_elements,
         })
     }
 }
@@ -329,23 +449,47 @@ impl<E: PropertyAccess> Parser<E> {
 // //////////////////////
 impl<E: PropertyAccess> Parser<E> {
     /// Reads payload. Encoding is chosen according to the encoding field in `header`.
-    pub fn read_payload<T: BufRead>(&self, reader: &mut T, header: &Header) -> Result<Payload<E>> {
-        let mut location = LocationTracker::new();
-        self.__read_payload(reader, &mut location, header)
+    pub fn read_payload<T: BufRead>(
+        &self,
+        reader: &mut Reader<T>,
+        header: &Header,
+    ) -> Result<Payload<E>> {
+        self.__read_payload(&mut reader.inner, &mut reader.location, header)
     }
     /// Reads entire list of elements from payload. Encoding is chosen according to `header`.
     ///
     /// Make sure to read the elements in the order as they are defined in the header.
-    pub fn read_payload_for_element<T: BufRead>(&self, reader: &mut T, element_def: &ElementDef, header: &Header) -> Result<Vec<E>> {
-        let mut location = LocationTracker::new();
+    pub fn read_payload_for_element<T: BufRead>(
+        &self,
+        reader: &mut Reader<T>,
+        element_def: &ElementDef,
+        header: &Header,
+    ) -> Result<Vec<E>> {
         match header.encoding {
-            Encoding::Ascii => self.__read_ascii_payload_for_element(reader, &mut location, element_def),
-            Encoding::BinaryBigEndian => self.__read_big_endian_payload_for_element(reader, &mut location, element_def),
-            Encoding::BinaryLittleEndian => self.__read_little_endian_payload_for_element(reader, &mut location, element_def),
+            Encoding::Ascii => self.__read_ascii_payload_for_element(
+                &mut reader.inner,
+                &mut reader.location,
+                element_def,
+            ),
+            Encoding::BinaryBigEndian => self.__read_big_endian_payload_for_element(
+                &mut reader.inner,
+                &mut reader.location,
+                element_def,
+            ),
+            Encoding::BinaryLittleEndian => self.__read_little_endian_payload_for_element(
+                &mut reader.inner,
+                &mut reader.location,
+                element_def,
+            ),
         }
     }
     /// internal dispatcher based on the encoding
-    fn __read_payload<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, header: &Header) -> Result<Payload<E>> {
+    fn __read_payload<T: BufRead>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+        header: &Header,
+    ) -> Result<Payload<E>> {
         let mut payload = Payload::with_capacity(header.elements.len());
 
         // Use an iterator over `header.elements` and avoid repeated matching
@@ -368,33 +512,43 @@ impl<E: PropertyAccess> Parser<E> {
 use std::slice::Iter;
 use std::str::FromStr;
 
-use crate::ply::{ PropertyType, ScalarType };
+use crate::ply::{PropertyType, ScalarType};
 use std::error;
 
 /// # Ascii
 impl<E: PropertyAccess> Parser<E> {
-    fn __read_ascii_payload_for_element<T: BufRead>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
+    fn __read_ascii_payload_for_element<T: BufRead>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+        element_def: &ElementDef,
+    ) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(self.cap_preallocated_size(element_def.count));
         // Pre-allocate a reasonably sized buffer to avoid frequent growth for typical lines
         let mut line_str = String::with_capacity(128);
         for i in 0..element_def.count {
             line_str.clear();
             if reader.read_line(&mut line_str)? == 0 {
-                return Err(io::Error::new(
+                return Err(ParseError::with_line(
                     ErrorKind::UnexpectedEof,
+                    location.line_index,
                     format!(
-                        "Line {}: Unexpected end of file while reading element '{}' (expected {}, got {}).",
-                        location.line_index,
-                        element_def.name,
-                        element_def.count,
-                        i,
+                        "Unexpected end of file while reading element '{}' (expected {}, got {}).",
+                        element_def.name, element_def.count, i,
                     ),
                 ));
             }
 
             let element = match self.read_ascii_element(&line_str, element_def) {
                 Ok(e) => e,
-                Err(e) => return parse_ascii_rethrow(location, &line_str, e, "Couldn't read element line.")
+                Err(e) => {
+                    return parse_ascii_rethrow(
+                        location,
+                        &line_str,
+                        e,
+                        "Couldn't read element line.",
+                    );
+                }
             };
             elems.push(element);
             location.next_line();
@@ -407,10 +561,15 @@ impl<E: PropertyAccess> Parser<E> {
     pub fn read_ascii_element(&self, line: &str, element_def: &ElementDef) -> Result<E> {
         let elems = match grammar::data_line(line) {
             Ok(e) => e,
-            Err(ref e) => return Err(io::Error::new(
+            Err(ref e) => {
+                return Err(ParseError::new(
                     ErrorKind::InvalidInput,
-                    format!("Couldn't parse element line.\n\tString: '{}'\n\tError: {}", line, e)
-                )),
+                    format!(
+                        "Couldn't parse element line.\n\tString: '{}'\n\tError: {}",
+                        line, e
+                    ),
+                ));
+            }
         };
 
         let mut elem_it: Iter<&str> = elems.iter();
@@ -421,12 +580,21 @@ impl<E: PropertyAccess> Parser<E> {
         Ok(vals)
     }
 
-    fn __next_ascii_token<'a>(&self, elem_iter: &mut Iter<'a, &str>, data_type: &PropertyType) -> Result<&'a str> {
+    fn __next_ascii_token<'a>(
+        &self,
+        elem_iter: &mut Iter<'a, &str>,
+        data_type: &PropertyType,
+    ) -> Result<&'a str> {
         let s: &str = match elem_iter.next() {
-            None => return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                format!("Expected element of type '{:?}', but found nothing.", data_type)
-            )),
+            None => {
+                return Err(ParseError::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "Expected element of type '{:?}', but found nothing.",
+                        data_type
+                    ),
+                ));
+            }
             Some(x) => x,
         };
         Ok(s)
@@ -459,56 +627,80 @@ impl<E: PropertyAccess> Parser<E> {
                         if let Some(list) = vals.begin_list_char(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_char(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_char(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::UChar => {
                         if let Some(list) = vals.begin_list_uchar(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_uchar(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_uchar(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::Short => {
                         if let Some(list) = vals.begin_list_short(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_short(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_short(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::UShort => {
                         if let Some(list) = vals.begin_list_ushort(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_ushort(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_ushort(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::Int => {
                         if let Some(list) = vals.begin_list_int(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_int(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_int(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::UInt => {
                         if let Some(list) = vals.begin_list_uint(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_uint(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_uint(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::Float => {
                         if let Some(list) = vals.begin_list_float(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_float(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_float(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                     ScalarType::Double => {
                         if let Some(list) = vals.begin_list_double(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_double(property_name, self.__read_ascii_list(elem_iter, count)?);
+                            vals.set_list_double(
+                                property_name,
+                                self.__read_ascii_list(elem_iter, count)?,
+                            );
                         }
                     }
                 }
@@ -518,12 +710,16 @@ impl<E: PropertyAccess> Parser<E> {
     }
 
     fn parse<D: FromStr>(&self, s: &str) -> Result<D>
-    where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
+    where
+        <D as FromStr>::Err: error::Error + Send + Sync + 'static,
+    {
         let v = s.parse();
         match v {
             Ok(r) => Ok(r),
-            Err(e) => Err(io::Error::new(ErrorKind::InvalidInput,
-                format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e))),
+            Err(e) => Err(ParseError::new(
+                ErrorKind::InvalidInput,
+                format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e),
+            )),
         }
     }
 
@@ -535,30 +731,43 @@ impl<E: PropertyAccess> Parser<E> {
         }
     }
 
-    fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize) -> Result<Vec<D>>
-        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
+    fn __read_ascii_list<D: FromStr>(
+        &self,
+        elem_iter: &mut Iter<&str>,
+        count: usize,
+    ) -> Result<Vec<D>>
+    where
+        <D as FromStr>::Err: error::Error + Send + Sync + 'static,
+    {
         let mut out = Vec::new();
         self.__read_ascii_list_into(elem_iter, count, &mut out)?;
         Ok(out)
     }
 
-    fn __read_ascii_list_into<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize, out: &mut Vec<D>) -> Result<()>
-        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
+    fn __read_ascii_list_into<D: FromStr>(
+        &self,
+        elem_iter: &mut Iter<&str>,
+        count: usize,
+        out: &mut Vec<D>,
+    ) -> Result<()>
+    where
+        <D as FromStr>::Err: error::Error + Send + Sync + 'static,
+    {
         self.__prepare_list(out, count);
         for i in 0..count {
             let s = match elem_iter.next() {
                 Some(s) => s,
                 None => {
-                    return Err(io::Error::new(
+                    return Err(ParseError::new(
                         ErrorKind::InvalidInput,
                         format!("Expected {} list elements, but found only {}.", count, i),
-                    ))
+                    ));
                 }
             };
             match s.parse() {
                 Ok(v) => out.push(v),
                 Err(err) => {
-                    return Err(io::Error::new(
+                    return Err(ParseError::new(
                         ErrorKind::InvalidInput,
                         format!("Couldn't parse element at index {}: {:?}", i, err),
                     ));
@@ -582,7 +791,7 @@ use ply::{ PropertyAccess, ElementDef, PropertyType, Property, ScalarType };
 use util::LocationTracker;
 use super::Parser;
 */
-use byteorder::{ BigEndian, LittleEndian, ReadBytesExt, ByteOrder };
+use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt};
 use peg;
 
 /// # Binary
@@ -590,27 +799,50 @@ impl<E: PropertyAccess> Parser<E> {
     /// Reads a single element as declared in `element_def`. Assumes big endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
-    pub fn read_big_endian_element<T: Read>(&self, reader: &mut T, element_def: &ElementDef) -> Result<E> {
+    pub fn read_big_endian_element<T: Read>(
+        &self,
+        reader: &mut T,
+        element_def: &ElementDef,
+    ) -> Result<E> {
         // Reduce coupling with ByteOrder
         self.__read_binary_element::<T, BigEndian>(reader, element_def)
     }
     /// Reads a single element as declared in `element_def`. Assumes little endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
-    pub fn read_little_endian_element<T: Read>(&self, reader: &mut T, element_def: &ElementDef) -> Result<E> {
+    pub fn read_little_endian_element<T: Read>(
+        &self,
+        reader: &mut T,
+        element_def: &ElementDef,
+    ) -> Result<E> {
         // Reduce coupling with ByteOrder
         self.__read_binary_element::<T, LittleEndian>(reader, element_def)
     }
 
     /// internal wrapper
-    fn __read_big_endian_payload_for_element<T: Read>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
+    fn __read_big_endian_payload_for_element<T: Read>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+        element_def: &ElementDef,
+    ) -> Result<Vec<E>> {
         self.__read_binary_payload_for_element::<T, BigEndian>(reader, location, element_def)
     }
-    fn __read_little_endian_payload_for_element<T: Read>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
+    fn __read_little_endian_payload_for_element<T: Read>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+        element_def: &ElementDef,
+    ) -> Result<Vec<E>> {
         self.__read_binary_payload_for_element::<T, LittleEndian>(reader, location, element_def)
     }
 
-    fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(&self, reader: &mut T, location: &mut LocationTracker, element_def: &ElementDef) -> Result<Vec<E>> {
+    fn __read_binary_payload_for_element<T: Read, B: ByteOrder>(
+        &self,
+        reader: &mut T,
+        location: &mut LocationTracker,
+        element_def: &ElementDef,
+    ) -> Result<Vec<E>> {
         let mut elems = Vec::<E>::with_capacity(self.cap_preallocated_size(element_def.count));
         location.next_line();
         for i in 0..element_def.count {
@@ -618,15 +850,12 @@ impl<E: PropertyAccess> Parser<E> {
                 .__read_binary_element::<T, B>(reader, element_def)
                 .map_err(|e| {
                     if e.kind() == ErrorKind::UnexpectedEof {
-                        io::Error::new(
+                        ParseError::with_line(
                             ErrorKind::UnexpectedEof,
+                            location.line_index,
                             format!(
-                                "Line {}: Unexpected end of file while reading binary element '{}' (expected {}, got {}).\n\tError: {}",
-                                location.line_index,
-                                element_def.name,
-                                element_def.count,
-                                i,
-                                e,
+                                "Unexpected end of file while reading binary element '{}' (expected {}, got {}).\n\tError: {}",
+                                element_def.name, element_def.count, i, e,
                             ),
                         )
                     } else {
@@ -638,7 +867,11 @@ impl<E: PropertyAccess> Parser<E> {
         }
         Ok(elems)
     }
-    fn __read_binary_element<T: Read, B: ByteOrder>(&self, reader: &mut T, element_def: &ElementDef) -> Result<E> {
+    fn __read_binary_element<T: Read, B: ByteOrder>(
+        &self,
+        reader: &mut T,
+        element_def: &ElementDef,
+    ) -> Result<E> {
         let mut raw_element = E::new();
 
         for (k, p) in &element_def.properties {
@@ -659,69 +892,137 @@ impl<E: PropertyAccess> Parser<E> {
                 ScalarType::Char => raw_element.set_char(property_name, reader.read_i8()?),
                 ScalarType::UChar => raw_element.set_uchar(property_name, reader.read_u8()?),
                 ScalarType::Short => raw_element.set_short(property_name, reader.read_i16::<B>()?),
-                ScalarType::UShort => raw_element.set_ushort(property_name, reader.read_u16::<B>()?),
+                ScalarType::UShort => {
+                    raw_element.set_ushort(property_name, reader.read_u16::<B>()?)
+                }
                 ScalarType::Int => raw_element.set_int(property_name, reader.read_i32::<B>()?),
                 ScalarType::UInt => raw_element.set_uint(property_name, reader.read_u32::<B>()?),
                 ScalarType::Float => raw_element.set_float(property_name, reader.read_f32::<B>()?),
-                ScalarType::Double => raw_element.set_double(property_name, reader.read_f64::<B>()?),
+                ScalarType::Double => {
+                    raw_element.set_double(property_name, reader.read_f64::<B>()?)
+                }
             },
             PropertyType::List(ref index_type, ref property_type) => {
                 let count = self.__read_binary_list_count::<T, B>(reader, index_type)?;
                 match *property_type {
                     ScalarType::Char => {
                         if let Some(list) = raw_element.begin_list_char(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_i8(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_i8()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_char(property_name, self.__read_binary_list(reader, |r| r.read_i8(), count)?);
+                            raw_element.set_list_char(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_i8()?), count)?,
+                            );
                         }
                     }
                     ScalarType::UChar => {
                         if let Some(list) = raw_element.begin_list_uchar(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_u8(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_u8()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_uchar(property_name, self.__read_binary_list(reader, |r| r.read_u8(), count)?);
+                            raw_element.set_list_uchar(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_u8()?), count)?,
+                            );
                         }
                     }
                     ScalarType::Short => {
                         if let Some(list) = raw_element.begin_list_short(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_i16::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_i16::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_short(property_name, self.__read_binary_list(reader, |r| r.read_i16::<B>(), count)?);
+                            raw_element.set_list_short(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_i16::<B>()?), count)?,
+                            );
                         }
                     }
                     ScalarType::UShort => {
                         if let Some(list) = raw_element.begin_list_ushort(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_u16::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_u16::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_ushort(property_name, self.__read_binary_list(reader, |r| r.read_u16::<B>(), count)?);
+                            raw_element.set_list_ushort(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_u16::<B>()?), count)?,
+                            );
                         }
                     }
                     ScalarType::Int => {
                         if let Some(list) = raw_element.begin_list_int(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_i32::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_i32::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_int(property_name, self.__read_binary_list(reader, |r| r.read_i32::<B>(), count)?);
+                            raw_element.set_list_int(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_i32::<B>()?), count)?,
+                            );
                         }
                     }
                     ScalarType::UInt => {
                         if let Some(list) = raw_element.begin_list_uint(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_u32::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_u32::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_uint(property_name, self.__read_binary_list(reader, |r| r.read_u32::<B>(), count)?);
+                            raw_element.set_list_uint(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_u32::<B>()?), count)?,
+                            );
                         }
                     }
                     ScalarType::Float => {
                         if let Some(list) = raw_element.begin_list_float(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_f32::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_f32::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_float(property_name, self.__read_binary_list(reader, |r| r.read_f32::<B>(), count)?);
+                            raw_element.set_list_float(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_f32::<B>()?), count)?,
+                            );
                         }
                     }
                     ScalarType::Double => {
                         if let Some(list) = raw_element.begin_list_double(property_name, count) {
-                            self.__read_binary_list_into(reader, |r| r.read_f64::<B>(), count, list)?;
+                            self.__read_binary_list_into(
+                                reader,
+                                |r| Ok(r.read_f64::<B>()?),
+                                count,
+                                list,
+                            )?;
                         } else {
-                            raw_element.set_list_double(property_name, self.__read_binary_list(reader, |r| r.read_f64::<B>(), count)?);
+                            raw_element.set_list_double(
+                                property_name,
+                                self.__read_binary_list(reader, |r| Ok(r.read_f64::<B>()?), count)?,
+                            );
                         }
                     }
                 }
@@ -730,71 +1031,113 @@ impl<E: PropertyAccess> Parser<E> {
         Ok(())
     }
 
-    fn __read_binary_list_count<T: Read, B: ByteOrder>(&self, reader: &mut T, index_type: &ScalarType) -> Result<usize> {
+    fn __read_binary_list_count<T: Read, B: ByteOrder>(
+        &self,
+        reader: &mut T,
+        index_type: &ScalarType,
+    ) -> Result<usize> {
         match *index_type {
             ScalarType::Char => {
                 let v = reader.read_i8()?;
                 if v < 0 {
-                    return Err(io::Error::new(
+                    return Err(ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length cannot be negative (i8).",
                     ));
                 }
                 usize::try_from(v as i64).map_err(|_| {
-                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                    ParseError::new(
+                        ErrorKind::InvalidInput,
+                        "List length does not fit into usize.",
+                    )
                 })
             }
             ScalarType::UChar => Ok(usize::from(reader.read_u8()?)),
             ScalarType::Short => {
                 let v = reader.read_i16::<B>()?;
                 if v < 0 {
-                    return Err(io::Error::new(
+                    return Err(ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length cannot be negative (i16).",
                     ));
                 }
                 usize::try_from(v as i64).map_err(|_| {
-                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                    ParseError::new(
+                        ErrorKind::InvalidInput,
+                        "List length does not fit into usize.",
+                    )
                 })
             }
             ScalarType::UShort => Ok(usize::from(reader.read_u16::<B>()?)),
             ScalarType::Int => {
                 let v = reader.read_i32::<B>()?;
                 if v < 0 {
-                    return Err(io::Error::new(
+                    return Err(ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length cannot be negative (i32).",
                     ));
                 }
                 usize::try_from(v as i64).map_err(|_| {
-                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                    ParseError::new(
+                        ErrorKind::InvalidInput,
+                        "List length does not fit into usize.",
+                    )
                 })
             }
             ScalarType::UInt => usize::try_from(reader.read_u32::<B>()?).map_err(|_| {
-                io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                ParseError::new(
+                    ErrorKind::InvalidInput,
+                    "List length does not fit into usize.",
+                )
             }),
-            ScalarType::Float => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in ScalarType.")),
-            ScalarType::Double => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in ScalarType.")),
+            ScalarType::Float => Err(ParseError::new(
+                ErrorKind::InvalidInput,
+                "Index of list must be an integer type, float declared in ScalarType.",
+            )),
+            ScalarType::Double => Err(ParseError::new(
+                ErrorKind::InvalidInput,
+                "Index of list must be an integer type, double declared in ScalarType.",
+            )),
         }
     }
 
-    fn __read_binary_list<T: Read, D, F>(&self, reader: &mut T, read_from: F, count: usize) -> Result<Vec<D>>
-        where F: Fn(&mut T) -> Result<D> {
+    fn __read_binary_list<T: Read, D, F>(
+        &self,
+        reader: &mut T,
+        read_from: F,
+        count: usize,
+    ) -> Result<Vec<D>>
+    where
+        F: Fn(&mut T) -> Result<D>,
+    {
         let mut list = Vec::new();
         self.__read_binary_list_into(reader, read_from, count, &mut list)?;
         Ok(list)
     }
 
-    fn __read_binary_list_into<T: Read, D, F>(&self, reader: &mut T, read_from: F, count: usize, list: &mut Vec<D>) -> Result<()>
-        where F: Fn(&mut T) -> Result<D> {
+    fn __read_binary_list_into<T: Read, D, F>(
+        &self,
+        reader: &mut T,
+        read_from: F,
+        count: usize,
+        list: &mut Vec<D>,
+    ) -> Result<()>
+    where
+        F: Fn(&mut T) -> Result<D>,
+    {
         self.__prepare_list(list, count);
         for i in 0..count {
-            let value : D = match read_from(reader) {
-                Err(e) => return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("Couldn't find a list element at index {}.\n\tError: {:?}", i, e)
-                )),
-                Ok(x) => x
+            let value: D = match read_from(reader) {
+                Err(e) => {
+                    return Err(ParseError::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "Couldn't find a list element at index {}.\n\tError: {:?}",
+                            i, e
+                        ),
+                    ));
+                }
+                Ok(x) => x,
             };
             list.push(value);
         }
@@ -802,37 +1145,38 @@ impl<E: PropertyAccess> Parser<E> {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
-    use super::grammar as g;
     use super::Line;
-    use crate::parser::Parser;
-    use crate::ply::{ DefaultElement, PropertyDef, Version, Encoding, ScalarType, PropertyType, ElementDef, KeyMap, Addable };
+    use super::grammar as g;
+    use crate::parser::{Parser, Reader};
+    use crate::ply::{
+        Addable, DefaultElement, ElementDef, Encoding, KeyMap, PropertyDef, PropertyType,
+        ScalarType, Version,
+    };
     macro_rules! assert_ok {
-        ($e:expr) => (
+        ($e:expr) => {
             match $e {
                 Ok(obj) => (obj),
                 Err(e) => panic!("{}", e),
             }
-        );
-        ($e:expr , $o:expr) => (
+        };
+        ($e:expr , $o:expr) => {
             let obj = assert_ok!($e);
             assert_eq!(obj, $o);
-        );
+        };
     }
     macro_rules! assert_err {
-        ($e:expr) => (
+        ($e:expr) => {
             let result = $e;
             assert!(result.is_err());
-        );
+        };
     }
     #[test]
-    fn parser_header_ok(){
+    fn parser_header_ok() {
         let p = Parser::<DefaultElement>::new();
         let txt = "ply\nformat ascii 1.0\nend_header\n";
-        let mut bytes = txt.as_bytes();
+        let mut bytes = Reader::new(txt.as_bytes());
         assert_ok!(p.read_header(&mut bytes));
 
         let txt = "ply\n\
@@ -843,13 +1187,13 @@ mod tests {
         element face 6\n\
         property list uchar int vertex_index\n\
         end_header\n";
-        let mut bytes = txt.as_bytes();
+        let mut bytes = Reader::new(txt.as_bytes());
         assert_ok!(p.read_header(&mut bytes));
     }
     #[test]
-    fn parser_demo_ok(){
+    fn parser_demo_ok() {
         let txt = "ply\nformat ascii 1.0\nend_header\n";
-        let mut bytes = txt.as_bytes();
+        let mut bytes = Reader::new(txt.as_bytes());
         let p = Parser::<DefaultElement>::new();
         assert_ok!(p.read_header(&mut bytes));
 
@@ -859,11 +1203,11 @@ mod tests {
         property float x\n\
         end_header\n
         6.28318530718"; // no newline at end!
-        let mut bytes = txt.as_bytes();
+        let mut bytes = Reader::new(txt.as_bytes());
         assert_ok!(p.read_header(&mut bytes));
     }
     #[test]
-    fn parser_single_elements_ok(){
+    fn parser_single_elements_ok() {
         let txt = "ply\r\n\
         format ascii 1.0\r\n\
         comment Hi, I'm your friendly comment.\r\n\
@@ -895,10 +1239,22 @@ mod tests {
         let p = Parser::<DefaultElement>::new();
         let txt = "0 1 2 3";
         let mut prop = KeyMap::<PropertyDef>::new();
-        prop.add(PropertyDef::new("a".to_string(), PropertyType::Scalar(ScalarType::Char)));
-        prop.add(PropertyDef::new("b".to_string(), PropertyType::Scalar(ScalarType::UChar)));
-        prop.add(PropertyDef::new("c".to_string(), PropertyType::Scalar(ScalarType::Short)));
-        prop.add(PropertyDef::new("d".to_string(), PropertyType::Scalar(ScalarType::UShort)));
+        prop.add(PropertyDef::new(
+            "a".to_string(),
+            PropertyType::Scalar(ScalarType::Char),
+        ));
+        prop.add(PropertyDef::new(
+            "b".to_string(),
+            PropertyType::Scalar(ScalarType::UChar),
+        ));
+        prop.add(PropertyDef::new(
+            "c".to_string(),
+            PropertyType::Scalar(ScalarType::Short),
+        ));
+        prop.add(PropertyDef::new(
+            "d".to_string(),
+            PropertyType::Scalar(ScalarType::UShort),
+        ));
         let mut elem_def = ElementDef::new("dummy".to_string());
         elem_def.properties = prop;
 
@@ -921,15 +1277,21 @@ mod tests {
     fn format_ok() {
         assert_ok!(
             g::format("format ascii 1.0"),
-            (Encoding::Ascii, Some(Version{major: 1, minor: 0}))
+            (Encoding::Ascii, Some(Version { major: 1, minor: 0 }))
         );
         assert_ok!(
             g::format("format binary_big_endian 2.1"),
-            (Encoding::BinaryBigEndian, Some(Version{major: 2, minor: 1}))
+            (
+                Encoding::BinaryBigEndian,
+                Some(Version { major: 2, minor: 1 })
+            )
         );
         assert_ok!(
             g::format("format binary_little_endian 1.0"),
-            (Encoding::BinaryLittleEndian, Some(Version{major: 1, minor: 0}))
+            (
+                Encoding::BinaryLittleEndian,
+                Some(Version { major: 1, minor: 0 })
+            )
         );
         assert_ok!(
             g::format("format binary_little_endian 1.99999999999999999999999999999999999999999999"),
@@ -984,10 +1346,7 @@ mod tests {
             count: 8,
             properties: Default::default(),
         });
-        assert_ok!(
-            g::element("element vertex 8"),
-            e
-        );
+        assert_ok!(g::element("element vertex 8"), e);
     }
     #[test]
     fn element_err() {
@@ -1004,13 +1363,19 @@ mod tests {
     fn property_list_ok() {
         assert_ok!(
             g::property("property list uchar int c"),
-            PropertyDef::new("c".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Int))
+            PropertyDef::new(
+                "c".to_string(),
+                PropertyType::List(ScalarType::UChar, ScalarType::Int)
+            )
         );
     }
     #[test]
     fn line_ok() {
         assert_ok!(g::line("ply "), Line::MagicNumber);
-        assert_ok!(g::line("format ascii 1.0 "), Line::Format((Encoding::Ascii, Some(Version{major: 1, minor: 0}))));
+        assert_ok!(
+            g::line("format ascii 1.0 "),
+            Line::Format((Encoding::Ascii, Some(Version { major: 1, minor: 0 })))
+        );
         assert_ok!(g::line("comment a very nice comment "));
         assert_ok!(g::line("element vertex 8 "));
         assert_ok!(g::line("property float x "));
@@ -1030,10 +1395,7 @@ mod tests {
             g::data_line("+7 -7 7 +5.21 -5.21 5.21 +0 -0 0 \r\n"),
             vec!["+7", "-7", "7", "+5.21", "-5.21", "5.21", "+0", "-0", "0"]
         );
-        assert_ok!(
-            g::data_line("034 8e3 8e-3"),
-            vec!["034", "8e3", "8e-3"]
-        );
+        assert_ok!(g::data_line("034 8e3 8e-3"), vec!["034", "8e3", "8e-3"]);
         assert_ok!(g::data_line(""), Vec::<&str>::new());
     }
     #[test]

@@ -1,9 +1,9 @@
-use ply_rs_bw::*;
 use ply_rs_bw::ply::*;
+use ply_rs_bw::*;
 
 use std::io::{BufReader, Cursor};
 
-fn try_read_from_bytes(bytes: &[u8]) -> std::io::Result<Ply<DefaultElement>> {
+fn try_read_from_bytes(bytes: &[u8]) -> parser::Result<Ply<DefaultElement>> {
     let mut reader = BufReader::new(bytes);
     let p = parser::Parser::<DefaultElement>::new();
     p.read_ply(&mut reader)
@@ -60,13 +60,70 @@ fn parser_read_payload_method_ok() {
 format ascii 1.0\n\
 element point 1\n\
 property int x\n\
+    end_header\n\
+7\n";
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = p.read_header(&mut reader).expect("header should parse");
+    let payload = p
+        .read_payload(&mut reader, &header)
+        .expect("payload should parse");
+    assert_eq!(payload["point"].len(), 1);
+}
+
+#[test]
+fn parser_split_reader_reports_file_relative_payload_lines() {
+    let bytes = b"ply\n\
+format ascii 1.0\n\
+element point 2\n\
+property int x\n\
 end_header\n\
 7\n";
     let p = parser::Parser::<DefaultElement>::new();
-    let mut reader = BufReader::new(&bytes[..]);
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
     let header = p.read_header(&mut reader).expect("header should parse");
-    let payload = p.read_payload(&mut reader, &header).expect("payload should parse");
-    assert_eq!(payload["point"].len(), 1);
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.line(), Some(7));
+    assert!(err.to_string().contains("Line 7:"));
+}
+
+#[test]
+fn parser_split_reader_keeps_line_numbers_across_multiple_elements() {
+    let bytes = b"ply\n\
+format ascii 1.0\n\
+element vertex 1\n\
+property float x\n\
+element face 1\n\
+property list uchar int vertex_index\n\
+end_header\n\
+1.0\n\
+2 0\n";
+
+    let vertex_parser = parser::Parser::<DefaultElement>::new();
+    let face_parser = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = vertex_parser
+        .read_header(&mut reader)
+        .expect("header should parse");
+    let vertex_element = header.elements.get("vertex").expect("vertex element");
+    let face_element = header.elements.get("face").expect("face element");
+
+    let vertices = vertex_parser
+        .read_payload_for_element(&mut reader, vertex_element, &header)
+        .expect("vertex payload should parse");
+    assert_eq!(vertices.len(), 1);
+
+    let err = face_parser
+        .read_payload_for_element(&mut reader, face_element, &header)
+        .expect_err("face payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(err.line(), Some(9));
+    assert!(err.to_string().contains("Line 9:"));
 }
 
 #[test]
@@ -74,8 +131,10 @@ fn parser_read_little_endian_element_ok() {
     let p = parser::Parser::<DefaultElement>::new();
 
     let mut e = ElementDef::new("v".to_string());
-    e.properties
-        .add(PropertyDef::new("x".to_string(), PropertyType::Scalar(ScalarType::Int)));
+    e.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Int),
+    ));
 
     let mut cur = Cursor::new(42i32.to_le_bytes());
     let elem = p
@@ -89,8 +148,10 @@ fn parser_read_big_endian_element_ok() {
     let p = parser::Parser::<DefaultElement>::new();
 
     let mut e = ElementDef::new("v".to_string());
-    e.properties
-        .add(PropertyDef::new("x".to_string(), PropertyType::Scalar(ScalarType::Int)));
+    e.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Int),
+    ));
 
     let mut cur = Cursor::new(42i32.to_be_bytes());
     let elem = p

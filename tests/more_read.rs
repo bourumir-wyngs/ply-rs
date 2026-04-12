@@ -9,7 +9,7 @@ fn read_from_bytes(bytes: &[u8]) -> ply::Ply<ply::DefaultElement> {
     ply.unwrap()
 }
 
-fn try_read_from_bytes(bytes: &[u8]) -> std::io::Result<ply::Ply<ply::DefaultElement>> {
+fn try_read_from_bytes(bytes: &[u8]) -> parser::Result<ply::Ply<ply::DefaultElement>> {
     let mut reader = BufReader::new(bytes);
     let p = parser::Parser::<ply::DefaultElement>::new();
     p.read_ply(&mut reader)
@@ -22,7 +22,7 @@ format ascii 1.0\r\n\
 comment\r\n\
 obj_info\r\n\
 end_header\r\n";
-    let mut reader = BufReader::new(&txt[..]);
+    let mut reader = parser::Reader::new(BufReader::new(&txt[..]));
     let p = parser::Parser::<ply::DefaultElement>::new();
     let header = p.read_header(&mut reader).expect("header should parse");
     assert_eq!(header.encoding, ply::Encoding::Ascii);
@@ -79,10 +79,14 @@ fn read_diverse_field_formats() {
 
     // Use include_bytes! to embed files at compile time, avoiding filesystem access.
     // This is done for Miri compatibility, as Miri's isolation mode doesn't support file I/O.
-    const FLOATS_INTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/floats_ints.ply");
-    const FLOATS_SHORTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/floats_shorts.ply");
-    const DOUBLES_INTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/doubles_ints.ply");
-    const DOUBLES_SHORTS: &[u8] = include_bytes!("../example_plys/diverse_field_formats/doubles_shorts.ply");
+    const FLOATS_INTS: &[u8] =
+        include_bytes!("../example_plys/diverse_field_formats/floats_ints.ply");
+    const FLOATS_SHORTS: &[u8] =
+        include_bytes!("../example_plys/diverse_field_formats/floats_shorts.ply");
+    const DOUBLES_INTS: &[u8] =
+        include_bytes!("../example_plys/diverse_field_formats/doubles_ints.ply");
+    const DOUBLES_SHORTS: &[u8] =
+        include_bytes!("../example_plys/diverse_field_formats/doubles_shorts.ply");
 
     let cases: Vec<(&[u8], ScalarType, ScalarType)> = vec![
         (FLOATS_INTS, ScalarType::Float, ScalarType::Int),
@@ -128,10 +132,7 @@ fn read_diverse_field_formats() {
 #[test]
 fn read_header_with_very_long_obj_info() {
     let long = "x".repeat(10_000);
-    let txt = format!(
-        "ply\nformat ascii 1.0\nobj_info {}\nend_header\n",
-        long
-    );
+    let txt = format!("ply\nformat ascii 1.0\nobj_info {}\nend_header\n", long);
     let ply = read_from_bytes(txt.as_bytes());
     assert_eq!(ply.header.obj_infos.len(), 1);
     assert_eq!(ply.header.obj_infos[0].len(), 10_000);
@@ -140,7 +141,7 @@ fn read_header_with_very_long_obj_info() {
 #[test]
 fn read_header_eof_before_end_header_is_error() {
     let txt = b"ply\nformat ascii 1.0\ncomment hi\n"; // missing end_header
-    let mut reader = BufReader::new(&txt[..]);
+    let mut reader = parser::Reader::new(BufReader::new(&txt[..]));
     let p = parser::Parser::<ply::DefaultElement>::new();
     let err = p.read_header(&mut reader).expect_err("should error");
     assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);

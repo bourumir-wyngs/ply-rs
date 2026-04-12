@@ -3,7 +3,7 @@
 [![Fuzz & Audit](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/ci.yml)
 [![Miri](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/miri.yml/badge.svg)](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/miri.yml)
 [![crates.io](https://img.shields.io/crates/v/ply-rs_bw.svg)](https://crates.io/crates/ply-rs-bw)
-[![API 3.x compatibility](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/api-compat.yml/badge.svg)](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/api-compat.yml)
+[![API 4.x compatibility](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/api-compat.yml/badge.svg)](https://github.com/bourumir-wyngs/ply-rs/actions/workflows/api-compat.yml)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/bourumir-wyngs/ply-rs/rust.yml)](https://github.com/bourumir-wyngs/ply-rs/actions)
 [![crates.io](https://img.shields.io/crates/l/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
 [![crates.io](https://img.shields.io/crates/d/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
@@ -33,7 +33,7 @@ This is the easiest way to read a ply file:
 use ply_rs_bw as ply;
 
 fn main() {
-    //Set up a reader, in this case, a file.
+    // Set up a reader, in this case, a file.
     let path = "example_plys/greg_turk_example1_ok_ascii.ply";
     let mut f = std::fs::File::open(path).unwrap();
 
@@ -53,6 +53,30 @@ fn main() {
 }
 
 ```
+
+If you need to inspect the header first and then continue parsing the payload, wrap your
+`BufRead` source in `parser::Reader`. It keeps parser state such as file-relative line
+tracking across `read_header`, `read_payload`, and `read_payload_for_element`.
+
+```rust
+use ply_rs_bw as ply;
+
+fn main() {
+    let path = "example_plys/greg_turk_example1_ok_ascii.ply";
+    let file = std::fs::File::open(path).unwrap();
+    let mut reader = ply::parser::Reader::new(std::io::BufReader::new(file));
+
+    let parser = ply::parser::Parser::<ply::ply::DefaultElement>::new();
+    let header = parser.read_header(&mut reader).unwrap();
+    let payload = parser.read_payload(&mut reader, &header).unwrap();
+
+    println!("Header: {:#?}", header);
+    println!("Payload keys: {:?}", payload.keys().collect::<Vec<_>>());
+}
+```
+
+Split parsing returns `ParseError`, which preserves file-relative line numbers and exposes
+them via `ParseError::line()`.
 
 ### Write ply file
 

@@ -16,15 +16,22 @@ fn read_from_bytes(bytes: &[u8]) -> Ply {
 // Embedded PLY files for Miri compatibility
 const EMPTY_OK_ASCII: &[u8] = include_bytes!("../example_plys/empty_ok_ascii.ply");
 const EMPTY_2_OK_ASCII: &[u8] = include_bytes!("../example_plys/empty_2_ok_ascii.ply");
-const EMPTY_2_OK_LITTLE_ENDIAN: &[u8] = include_bytes!("../example_plys/empty_2_ok_little_endian.ply");
+const EMPTY_2_OK_LITTLE_ENDIAN: &[u8] =
+    include_bytes!("../example_plys/empty_2_ok_little_endian.ply");
 const HOUSE_OK_ASCII: &[u8] = include_bytes!("../example_plys/house_ok_ascii.ply");
 const HOUSE_2_OK_ASCII: &[u8] = include_bytes!("../example_plys/house_2_ok_ascii.ply");
-const HOUSE_2_OK_LITTLE_ENDIAN: &[u8] = include_bytes!("../example_plys/house_2_ok_little_endian.ply");
-const GREG_TURK_EXAMPLE1_OK_ASCII: &[u8] = include_bytes!("../example_plys/greg_turk_example1_ok_ascii.ply");
-const GREG_TURK_EXAMPLE2_OK_ASCII: &[u8] = include_bytes!("../example_plys/greg_turk_example2_ok_ascii.ply");
-const EXPONENT_VALUES_OK_ASCII: &[u8] = include_bytes!("../example_plys/exponent_values_ok_ascii.ply");
-const LEADING_SPACES_OK_ASCII: &[u8] = include_bytes!("../example_plys/leading_spaces_ok_ascii.ply");
-const ALL_ATOMIC_TYPES_OK_ASCII: &[u8] = include_bytes!("../example_plys/all_atomic_types_ok_ascii.ply");
+const HOUSE_2_OK_LITTLE_ENDIAN: &[u8] =
+    include_bytes!("../example_plys/house_2_ok_little_endian.ply");
+const GREG_TURK_EXAMPLE1_OK_ASCII: &[u8] =
+    include_bytes!("../example_plys/greg_turk_example1_ok_ascii.ply");
+const GREG_TURK_EXAMPLE2_OK_ASCII: &[u8] =
+    include_bytes!("../example_plys/greg_turk_example2_ok_ascii.ply");
+const EXPONENT_VALUES_OK_ASCII: &[u8] =
+    include_bytes!("../example_plys/exponent_values_ok_ascii.ply");
+const LEADING_SPACES_OK_ASCII: &[u8] =
+    include_bytes!("../example_plys/leading_spaces_ok_ascii.ply");
+const ALL_ATOMIC_TYPES_OK_ASCII: &[u8] =
+    include_bytes!("../example_plys/all_atomic_types_ok_ascii.ply");
 
 #[test]
 fn read_empty() {
@@ -82,9 +89,9 @@ fn read_all_atomic_types_ok() {
 }
 
 mod struct_test_1 {
+    use super::parser::{Parser, Reader};
     use super::ply;
-    use super::parser::Parser;
-    use super::{read_from_bytes, GREG_TURK_EXAMPLE1_OK_ASCII};
+    use super::{GREG_TURK_EXAMPLE1_OK_ASCII, read_from_bytes};
     #[derive(Debug)]
     struct Vertex {
         x: f32,
@@ -96,7 +103,6 @@ mod struct_test_1 {
     struct Face {
         vertex_index: Vec<i32>,
     }
-
 
     impl ply::PropertyAccess for Vertex {
         fn new() -> Self {
@@ -135,7 +141,7 @@ mod struct_test_1 {
     #[test]
     fn read_into_struct() {
         // Use include_bytes! data for Miri compatibility
-        let mut f = std::io::BufReader::new(GREG_TURK_EXAMPLE1_OK_ASCII);
+        let mut f = Reader::new(std::io::BufReader::new(GREG_TURK_EXAMPLE1_OK_ASCII));
 
         // Create a parser for each struct. Parsers are cheap objects.
         let vertex_parser = Parser::<Vertex>::new();
@@ -152,8 +158,16 @@ mod struct_test_1 {
         for (_ignore_key, element) in &header.elements {
             // we could also just parse them in sequence, but the file format might change
             match element.name.as_ref() {
-                "vertex" => {vertex_list = vertex_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
-                "face" => {face_list = face_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
+                "vertex" => {
+                    vertex_list = vertex_parser
+                        .read_payload_for_element(&mut f, element, &header)
+                        .unwrap();
+                }
+                "face" => {
+                    face_list = face_parser
+                        .read_payload_for_element(&mut f, element, &header)
+                        .unwrap();
+                }
                 _ => panic!("Unexpected element!"),
             }
         }

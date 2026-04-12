@@ -1,25 +1,21 @@
-use ply_rs_bw::ply;
 use ply_rs_bw::parser;
+use ply_rs_bw::ply;
 
-
-/// We know, what data we want to read, hence we can be more efficient by loading the data into structs.
-#[derive(Debug)] // not necessary for parsing, only for println at end of example.
+/// We know what data we want to read, so we can parse straight into our own structs.
+#[derive(Debug)] // Not necessary for parsing, only for printing at the end of the example.
 struct Vertex {
     x: f32,
     y: f32,
     z: f32,
 }
 
-
 #[derive(Debug)]
 struct Face {
     vertex_index: Vec<i32>,
 }
 
-
-// The structs need to implement the PropertyAccess trait, otherwise the parser doesn't know how to write to them.
-// Most functions have default, hence you only need to implement, what you expect to need.
-
+// The structs need to implement PropertyAccess so the parser knows how to write
+// parsed properties into them.
 impl ply::PropertyAccess for Vertex {
     fn new() -> Self {
         Vertex {
@@ -38,7 +34,7 @@ impl ply::PropertyAccess for Vertex {
     }
 }
 
-// same thing for Face
+// Same thing for Face.
 impl ply::PropertyAccess for Face {
     fn new() -> Self {
         Face {
@@ -53,36 +49,46 @@ impl ply::PropertyAccess for Face {
     }
 }
 
-/// Demonstrates simplest use case for reading from a file.
+/// Demonstrates split parsing into custom element types.
 fn main() {
-    // set up a reader, in this a file.
+    // Set up a reader, in this case a file.
     let path = "example_plys/greg_turk_example1_ok_ascii.ply";
     let f = std::fs::File::open(path).unwrap();
-    // The header of a ply file consists of ascii lines, BufRead provides useful methods for that.
-    let mut f = std::io::BufReader::new(f);
+
+    // parser::Reader keeps parser state alive across read_header and
+    // read_payload_for_element, including file-relative line tracking.
+    let mut f = parser::Reader::new(std::io::BufReader::new(f));
 
     // Create a parser for each struct. Parsers are cheap objects.
     let vertex_parser = parser::Parser::<Vertex>::new();
     let face_parser = parser::Parser::<Face>::new();
 
-    // lets first consume the header
-    // We also could use `face_parser`, The configuration is a parser's only state.
+    // First consume the header.
+    // We also could use `face_parser`; parser configuration is its only state.
     // The reading position only depends on `f`.
     let header = vertex_parser.read_header(&mut f).unwrap();
 
-    // Depending on the header, read the data into our structs..
+    // Depending on the header, read the data into our structs.
     let mut vertex_list = Vec::new();
     let mut face_list = Vec::new();
     for (_ignore_key, element) in &header.elements {
-        // we could also just parse them in sequence, but the file format might change
+        // We could also just parse them in sequence, but the file format might change.
         match element.name.as_ref() {
-            "vertex" => {vertex_list = vertex_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
-            "face" => {face_list = face_parser.read_payload_for_element(&mut f, element, &header).unwrap();},
+            "vertex" => {
+                vertex_list = vertex_parser
+                    .read_payload_for_element(&mut f, element, &header)
+                    .unwrap();
+            }
+            "face" => {
+                face_list = face_parser
+                    .read_payload_for_element(&mut f, element, &header)
+                    .unwrap();
+            }
             _ => panic!("Unexpected element!"),
         }
     }
 
-    // proof that data has been read
+    // Proof that data has been read.
     println!("header: {:#?}", header);
     println!("vertex list: {:#?}", vertex_list);
     println!("face list: {:#?}", face_list);

@@ -3,23 +3,20 @@ use ply_rs_bw as ply;
 /// Sometimes only the metadata is interesting to us.
 /// Reading the entire PLY file would be a waste of resources.
 fn main() {
-    // set up a reader, in this case a file.
+    // Set up a reader, in this case a file.
     let path = "example_plys/greg_turk_example1_ok_ascii.ply";
     let f = std::fs::File::open(path).unwrap();
 
-    // Reading a header, requires a reader that provides a way to read single line
-    // in read_ply, this conversion happens internally.
-    let mut reader = std::io::BufReader::new(f);
+    // Split parsing uses parser::Reader so the parser can keep state such as
+    // file-relative line tracking across header and payload parsing.
+    let mut reader = ply::parser::Reader::new(std::io::BufReader::new(f));
 
-    // create a parser
+    // Create a parser.
     let p = ply::parser::Parser::<ply::ply::DefaultElement>::new();
 
-    // use the parser: read the entire file
-    let ply = p.read_header(&mut reader);
+    // Read only the header.
+    let header = p.read_header(&mut reader).unwrap();
 
-    // make sure it did work
-    assert!(ply.is_ok());
-
-    // proof that data has been read
-    println!("Read ply data: {:#?}", ply.unwrap());
+    // Proof that data has been read.
+    println!("Read ply header: {:#?}", header);
 }
