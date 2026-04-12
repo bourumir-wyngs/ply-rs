@@ -41,6 +41,13 @@ impl ParseError {
         }
     }
 
+    fn with_line_if_missing(mut self, line: usize) -> Self {
+        if self.line.is_none() {
+            self.line = Some(line);
+        }
+        self
+    }
+
     /// Returns the underlying error kind.
     pub fn kind(&self) -> ErrorKind {
         self.kind
@@ -944,13 +951,14 @@ impl<E: PropertyAccess> Parser<E> {
             let element = self
                 .__read_binary_element::<T, B>(reader, element_def)
                 .map_err(|e| {
+                    let e = e.with_line_if_missing(location.line_index);
                     if e.kind() == ErrorKind::UnexpectedEof {
                         ParseError::with_line(
                             ErrorKind::UnexpectedEof,
-                            location.line_index,
+                            e.line.expect("binary payload errors should carry the current line"),
                             format!(
                                 "Unexpected end of file while reading binary element '{}' (expected {}, got {}).\n\tError: {}",
-                                element_def.name, element_def.count, i, e,
+                                element_def.name, element_def.count, i, e.message,
                             ),
                         )
                     } else {
@@ -1081,7 +1089,8 @@ impl<E: PropertyAccess> Parser<E> {
                             )?;
                         }
                     },
-                    ScalarType::UShort => match raw_element.begin_list_ushort(property_name, count) {
+                    ScalarType::UShort => match raw_element.begin_list_ushort(property_name, count)
+                    {
                         BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
@@ -1177,7 +1186,8 @@ impl<E: PropertyAccess> Parser<E> {
                             )?;
                         }
                     },
-                    ScalarType::Double => match raw_element.begin_list_double(property_name, count) {
+                    ScalarType::Double => match raw_element.begin_list_double(property_name, count)
+                    {
                         BeginList::Fill(list) => {
                             self.__read_binary_list_into(
                                 reader,
@@ -1305,13 +1315,14 @@ impl<E: PropertyAccess> Parser<E> {
         for i in 0..count {
             let value: D = match read_from(reader) {
                 Err(e) => {
-                    return Err(ParseError::new(
-                        ErrorKind::InvalidInput,
-                        format!(
-                            "Couldn't find a list element at index {}.\n\tError: {:?}",
-                            i, e
+                    return Err(ParseError {
+                        kind: e.kind,
+                        line: e.line,
+                        message: format!(
+                            "Couldn't find a list element at index {}.\n\tError: {}",
+                            i, e.message
                         ),
-                    ));
+                    });
                 }
                 Ok(x) => x,
             };

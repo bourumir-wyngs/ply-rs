@@ -184,6 +184,85 @@ end_header\n";
 }
 
 #[test]
+fn parser_split_reader_reports_binary_invalid_data_lines() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(
+        b"ply\n\
+format binary_little_endian 1.0\n\
+element point 1\n\
+property float x\n\
+end_header\n",
+    );
+    bytes.extend_from_slice(&1.5f32.to_le_bytes());
+
+    let p = parser::Parser::<RejectFloatElem>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = p.read_header(&mut reader).expect("header should parse");
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert_eq!(err.line(), Some(6));
+    assert!(err.to_string().contains("Line 6:"));
+    assert!(err.to_string().contains("PLY property 'x'"));
+}
+
+#[test]
+fn parser_split_reader_reports_binary_invalid_input_lines() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(
+        b"ply\n\
+format binary_little_endian 1.0\n\
+element face 1\n\
+property list int int vertex_index\n\
+end_header\n",
+    );
+    bytes.extend_from_slice(&(-1i32).to_le_bytes());
+
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = p.read_header(&mut reader).expect("header should parse");
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(err.line(), Some(6));
+    assert!(err.to_string().contains("Line 6:"));
+    assert!(err.to_string().contains("List length cannot be negative"));
+}
+
+#[test]
+fn parser_split_reader_preserves_binary_list_eof_kind_and_line() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(
+        b"ply\n\
+format binary_little_endian 1.0\n\
+element face 1\n\
+property list uchar int vertex_index\n\
+end_header\n",
+    );
+    bytes.push(2);
+    bytes.extend_from_slice(&7i32.to_le_bytes());
+
+    let p = parser::Parser::<DefaultElement>::new();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let header = p.read_header(&mut reader).expect("header should parse");
+    let err = p
+        .read_payload(&mut reader, &header)
+        .expect_err("payload should fail");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.line(), Some(6));
+    assert!(err.to_string().contains("Line 6:"));
+    assert!(
+        err.to_string()
+            .contains("Couldn't find a list element at index 1")
+    );
+}
+
+#[test]
 fn parser_read_little_endian_element_ok() {
     let p = parser::Parser::<DefaultElement>::new();
 
