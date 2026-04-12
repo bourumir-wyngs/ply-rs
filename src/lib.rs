@@ -24,7 +24,7 @@
 //! Performance can be achieved by using the finer granular methods and your own structs:
 //!
 //! - `Writer` and `Parser` provide you with methods down to the line/element level for nice things like streaming architectures.
-//! - `Ply`, `Writer`, and `Parser` use generics for the element-type. If HashMaps are too slow for you, define your own structs and implement the `PropertyAccess` trait. Data will then be written directly to your target format.
+//! - `Ply`, `Writer`, and `Parser` use generics for the element-type. If HashMaps are too slow for you, define your own structs and implement the `PropertyAccess` trait. The parser can then write scalars straight into your element type and fill owned list vectors without temporary `Property` values when your implementation opts in.
 
 pub mod parser;
 pub mod ply;

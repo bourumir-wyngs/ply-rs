@@ -97,6 +97,8 @@ pub enum Property {
 ///
 /// Feel free only to implement what your application actually uses:
 /// If you know, that you only expect unsigned shorts, don't bother about implementing signed shorts or floats, it won't be called.
+/// Overriding the typed setters or list-begin hooks lets the parser bypass intermediate
+/// [`Property`] construction and, for list properties, fill your destination `Vec` directly.
 ///
 /// The getters are named in congruence with `PropertyType` and `ScalarType`.
 pub trait PropertyAccess {
@@ -107,6 +109,142 @@ pub trait PropertyAccess {
     fn set_property(&mut self, _property_name: &str, _property: Property) {
         // By default, do nothing
         // Sombody might only want to write, no point in bothering him/her with setter implementations.
+    }
+
+    /// Sets the property value as a signed 8-bit integer (`char`).
+    fn set_char(&mut self, property_name: &str, value: i8) {
+        self.set_property(property_name, Property::Char(value));
+    }
+
+    /// Sets the property value as an unsigned 8-bit integer (`uchar`).
+    fn set_uchar(&mut self, property_name: &str, value: u8) {
+        self.set_property(property_name, Property::UChar(value));
+    }
+
+    /// Sets the property value as a signed 16-bit integer (`short`).
+    fn set_short(&mut self, property_name: &str, value: i16) {
+        self.set_property(property_name, Property::Short(value));
+    }
+
+    /// Sets the property value as an unsigned 16-bit integer (`ushort`).
+    fn set_ushort(&mut self, property_name: &str, value: u16) {
+        self.set_property(property_name, Property::UShort(value));
+    }
+
+    /// Sets the property value as a signed 32-bit integer (`int`).
+    fn set_int(&mut self, property_name: &str, value: i32) {
+        self.set_property(property_name, Property::Int(value));
+    }
+
+    /// Sets the property value as an unsigned 32-bit integer (`uint`).
+    fn set_uint(&mut self, property_name: &str, value: u32) {
+        self.set_property(property_name, Property::UInt(value));
+    }
+
+    /// Sets the property value as a 32-bit floating point number (`float`).
+    fn set_float(&mut self, property_name: &str, value: f32) {
+        self.set_property(property_name, Property::Float(value));
+    }
+
+    /// Sets the property value as a 64-bit floating point number (`double`).
+    fn set_double(&mut self, property_name: &str, value: f64) {
+        self.set_property(property_name, Property::Double(value));
+    }
+
+    /// Sets the property value as a list of signed 8-bit integers.
+    fn set_list_char(&mut self, property_name: &str, value: Vec<i8>) {
+        self.set_property(property_name, Property::ListChar(value));
+    }
+
+    /// Sets the property value as a list of unsigned 8-bit integers.
+    fn set_list_uchar(&mut self, property_name: &str, value: Vec<u8>) {
+        self.set_property(property_name, Property::ListUChar(value));
+    }
+
+    /// Sets the property value as a list of signed 16-bit integers.
+    fn set_list_short(&mut self, property_name: &str, value: Vec<i16>) {
+        self.set_property(property_name, Property::ListShort(value));
+    }
+
+    /// Sets the property value as a list of unsigned 16-bit integers.
+    fn set_list_ushort(&mut self, property_name: &str, value: Vec<u16>) {
+        self.set_property(property_name, Property::ListUShort(value));
+    }
+
+    /// Sets the property value as a list of signed 32-bit integers.
+    fn set_list_int(&mut self, property_name: &str, value: Vec<i32>) {
+        self.set_property(property_name, Property::ListInt(value));
+    }
+
+    /// Sets the property value as a list of unsigned 32-bit integers.
+    fn set_list_uint(&mut self, property_name: &str, value: Vec<u32>) {
+        self.set_property(property_name, Property::ListUInt(value));
+    }
+
+    /// Sets the property value as a list of 32-bit floating point numbers.
+    fn set_list_float(&mut self, property_name: &str, value: Vec<f32>) {
+        self.set_property(property_name, Property::ListFloat(value));
+    }
+
+    /// Sets the property value as a list of 64-bit floating point numbers.
+    fn set_list_double(&mut self, property_name: &str, value: Vec<f64>) {
+        self.set_property(property_name, Property::ListDouble(value));
+    }
+
+    /// Returns mutable access to the destination storage for a signed 8-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_char(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i8>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for an unsigned 8-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_uchar(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u8>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for a signed 16-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_short(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i16>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for an unsigned 16-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_ushort(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u16>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for a signed 32-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_int(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<i32>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for an unsigned 32-bit list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_uint(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<u32>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for a 32-bit floating point list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_float(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<f32>> {
+        None
+    }
+
+    /// Returns mutable access to the destination storage for a 64-bit floating point list property.
+    ///
+    /// The parser clears and refills the returned vector.
+    fn begin_list_double(&mut self, _property_name: &str, _len: usize) -> Option<&mut Vec<f64>> {
+        None
     }
 
     /// Returns the property value as a signed 8-bit integer (`char`).

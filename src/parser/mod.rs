@@ -368,7 +368,7 @@ impl<E: PropertyAccess> Parser<E> {
 use std::slice::Iter;
 use std::str::FromStr;
 
-use crate::ply::{ Property, PropertyType, ScalarType };
+use crate::ply::{ PropertyType, ScalarType };
 use std::error;
 
 /// # Ascii
@@ -416,12 +416,12 @@ impl<E: PropertyAccess> Parser<E> {
         let mut elem_it: Iter<&str> = elems.iter();
         let mut vals = E::new();
         for (k, p) in &element_def.properties {
-            let new_p: Property = self.__read_ascii_property(&mut elem_it, &p.data_type)?;
-            vals.set_property(k, new_p);
+            self.__read_ascii_property_into(&mut vals, k, &p.data_type, &mut elem_it)?;
         }
         Ok(vals)
     }
-    fn __read_ascii_property(&self, elem_iter: &mut Iter<&str>, data_type: &PropertyType) -> Result<Property> {
+
+    fn __next_ascii_token<'a>(&self, elem_iter: &mut Iter<'a, &str>, data_type: &PropertyType) -> Result<&'a str> {
         let s: &str = match elem_iter.next() {
             None => return Err(io::Error::new(
                 ErrorKind::InvalidInput,
@@ -429,33 +429,92 @@ impl<E: PropertyAccess> Parser<E> {
             )),
             Some(x) => x,
         };
+        Ok(s)
+    }
 
-        let result = match *data_type {
+    fn __read_ascii_property_into(
+        &self,
+        vals: &mut E,
+        property_name: &str,
+        data_type: &PropertyType,
+        elem_iter: &mut Iter<&str>,
+    ) -> Result<()> {
+        let s = self.__next_ascii_token(elem_iter, data_type)?;
+
+        match *data_type {
             PropertyType::Scalar(ref scalar_type) => match *scalar_type {
-                ScalarType::Char => Property::Char(self.parse(s)?),
-                ScalarType::UChar => Property::UChar(self.parse(s)?),
-                ScalarType::Short => Property::Short(self.parse(s)?),
-                ScalarType::UShort => Property::UShort(self.parse(s)?),
-                ScalarType::Int => Property::Int(self.parse(s)?),
-                ScalarType::UInt => Property::UInt(self.parse(s)?),
-                ScalarType::Float => Property::Float(self.parse(s)?),
-                ScalarType::Double => Property::Double(self.parse(s)?),
+                ScalarType::Char => vals.set_char(property_name, self.parse(s)?),
+                ScalarType::UChar => vals.set_uchar(property_name, self.parse(s)?),
+                ScalarType::Short => vals.set_short(property_name, self.parse(s)?),
+                ScalarType::UShort => vals.set_ushort(property_name, self.parse(s)?),
+                ScalarType::Int => vals.set_int(property_name, self.parse(s)?),
+                ScalarType::UInt => vals.set_uint(property_name, self.parse(s)?),
+                ScalarType::Float => vals.set_float(property_name, self.parse(s)?),
+                ScalarType::Double => vals.set_double(property_name, self.parse(s)?),
             },
             PropertyType::List(_, ref scalar_type) => {
                 let count: usize = self.parse(s)?;
                 match *scalar_type {
-                    ScalarType::Char => Property::ListChar(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::UChar => Property::ListUChar(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::Short => Property::ListShort(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::UShort => Property::ListUShort(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::Int => Property::ListInt(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::UInt => Property::ListUInt(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::Float => Property::ListFloat(self.__read_ascii_list(elem_iter, count)?),
-                    ScalarType::Double => Property::ListDouble(self.__read_ascii_list(elem_iter, count)?),
+                    ScalarType::Char => {
+                        if let Some(list) = vals.begin_list_char(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_char(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::UChar => {
+                        if let Some(list) = vals.begin_list_uchar(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_uchar(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::Short => {
+                        if let Some(list) = vals.begin_list_short(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_short(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::UShort => {
+                        if let Some(list) = vals.begin_list_ushort(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_ushort(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::Int => {
+                        if let Some(list) = vals.begin_list_int(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_int(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::UInt => {
+                        if let Some(list) = vals.begin_list_uint(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_uint(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::Float => {
+                        if let Some(list) = vals.begin_list_float(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_float(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
+                    ScalarType::Double => {
+                        if let Some(list) = vals.begin_list_double(property_name, count) {
+                            self.__read_ascii_list_into(elem_iter, count, list)?;
+                        } else {
+                            vals.set_list_double(property_name, self.__read_ascii_list(elem_iter, count)?);
+                        }
+                    }
                 }
             }
-        };
-        Ok(result)
+        }
+        Ok(())
     }
 
     fn parse<D: FromStr>(&self, s: &str) -> Result<D>
@@ -467,9 +526,25 @@ impl<E: PropertyAccess> Parser<E> {
                 format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e))),
         }
     }
+
+    fn __prepare_list<D>(&self, out: &mut Vec<D>, count: usize) {
+        out.clear();
+        let desired_capacity = self.cap_preallocated_size(count);
+        if out.capacity() < desired_capacity {
+            out.reserve(desired_capacity - out.capacity());
+        }
+    }
+
     fn __read_ascii_list<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize) -> Result<Vec<D>>
         where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
-        let mut out: Vec<D> = Vec::with_capacity(self.cap_preallocated_size(count));
+        let mut out = Vec::new();
+        self.__read_ascii_list_into(elem_iter, count, &mut out)?;
+        Ok(out)
+    }
+
+    fn __read_ascii_list_into<D: FromStr>(&self, elem_iter: &mut Iter<&str>, count: usize, out: &mut Vec<D>) -> Result<()>
+        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
+        self.__prepare_list(out, count);
         for i in 0..count {
             let s = match elem_iter.next() {
                 Some(s) => s,
@@ -490,7 +565,7 @@ impl<E: PropertyAccess> Parser<E> {
                 }
             }
         }
-        Ok(out)
+        Ok(())
     }
 }
 
@@ -567,86 +642,152 @@ impl<E: PropertyAccess> Parser<E> {
         let mut raw_element = E::new();
 
         for (k, p) in &element_def.properties {
-            let property = self.__read_binary_property::<T, B>(reader, &p.data_type)?;
-            raw_element.set_property(k, property);
+            self.__read_binary_property_into::<T, B>(reader, &mut raw_element, k, &p.data_type)?;
         }
         Ok(raw_element)
     }
-    fn __read_binary_property<T: Read, B: ByteOrder>(&self, reader: &mut T, data_type: &PropertyType) -> Result<Property> {
-        let result = match *data_type {
+
+    fn __read_binary_property_into<T: Read, B: ByteOrder>(
+        &self,
+        reader: &mut T,
+        raw_element: &mut E,
+        property_name: &str,
+        data_type: &PropertyType,
+    ) -> Result<()> {
+        match *data_type {
             PropertyType::Scalar(ref scalar_type) => match *scalar_type {
-                ScalarType::Char => Property::Char(reader.read_i8()?),
-                ScalarType::UChar => Property::UChar(reader.read_u8()?),
-                ScalarType::Short => Property::Short(reader.read_i16::<B>()?),
-                ScalarType::UShort => Property::UShort(reader.read_u16::<B>()?),
-                ScalarType::Int => Property::Int(reader.read_i32::<B>()?),
-                ScalarType::UInt => Property::UInt(reader.read_u32::<B>()?),
-                ScalarType::Float => Property::Float(reader.read_f32::<B>()?),
-                ScalarType::Double => Property::Double(reader.read_f64::<B>()?),
+                ScalarType::Char => raw_element.set_char(property_name, reader.read_i8()?),
+                ScalarType::UChar => raw_element.set_uchar(property_name, reader.read_u8()?),
+                ScalarType::Short => raw_element.set_short(property_name, reader.read_i16::<B>()?),
+                ScalarType::UShort => raw_element.set_ushort(property_name, reader.read_u16::<B>()?),
+                ScalarType::Int => raw_element.set_int(property_name, reader.read_i32::<B>()?),
+                ScalarType::UInt => raw_element.set_uint(property_name, reader.read_u32::<B>()?),
+                ScalarType::Float => raw_element.set_float(property_name, reader.read_f32::<B>()?),
+                ScalarType::Double => raw_element.set_double(property_name, reader.read_f64::<B>()?),
             },
             PropertyType::List(ref index_type, ref property_type) => {
-                let count: usize = match *index_type {
-                    ScalarType::Char => {
-                        let v = reader.read_i8()?;
-                        if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i8).",
-                            ));
-                        }
-                        usize::try_from(v as i64).map_err(|_| {
-                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
-                        })?
-                    }
-                    ScalarType::UChar => usize::from(reader.read_u8()?),
-                    ScalarType::Short => {
-                        let v = reader.read_i16::<B>()?;
-                        if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i16).",
-                            ));
-                        }
-                        usize::try_from(v as i64).map_err(|_| {
-                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
-                        })?
-                    }
-                    ScalarType::UShort => usize::from(reader.read_u16::<B>()?),
-                    ScalarType::Int => {
-                        let v = reader.read_i32::<B>()?;
-                        if v < 0 {
-                            return Err(io::Error::new(
-                                ErrorKind::InvalidInput,
-                                "List length cannot be negative (i32).",
-                            ));
-                        }
-                        usize::try_from(v as i64).map_err(|_| {
-                            io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
-                        })?
-                    }
-                    ScalarType::UInt => usize::try_from(reader.read_u32::<B>()?).map_err(|_| {
-                        io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
-                    })?,
-                    ScalarType::Float => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in ScalarType.")),
-                    ScalarType::Double => return Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in ScalarType.")),
-                };
+                let count = self.__read_binary_list_count::<T, B>(reader, index_type)?;
                 match *property_type {
-                    ScalarType::Char => Property::ListChar(self.__read_binary_list(reader, &|r| r.read_i8(), count)?),
-                    ScalarType::UChar => Property::ListUChar(self.__read_binary_list(reader, &|r| r.read_u8(), count)?),
-                    ScalarType::Short => Property::ListShort(self.__read_binary_list(reader, &|r| r.read_i16::<B>(), count)?),
-                    ScalarType::UShort => Property::ListUShort(self.__read_binary_list(reader, &|r| r.read_u16::<B>(), count)?),
-                    ScalarType::Int => Property::ListInt(self.__read_binary_list(reader, &|r| r.read_i32::<B>(), count)?),
-                    ScalarType::UInt => Property::ListUInt(self.__read_binary_list(reader, &|r| r.read_u32::<B>(), count)?),
-                    ScalarType::Float => Property::ListFloat(self.__read_binary_list(reader, &|r| r.read_f32::<B>(), count)?),
-                    ScalarType::Double => Property::ListDouble(self.__read_binary_list(reader, &|r| r.read_f64::<B>(), count)?),
+                    ScalarType::Char => {
+                        if let Some(list) = raw_element.begin_list_char(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_i8(), count, list)?;
+                        } else {
+                            raw_element.set_list_char(property_name, self.__read_binary_list(reader, |r| r.read_i8(), count)?);
+                        }
+                    }
+                    ScalarType::UChar => {
+                        if let Some(list) = raw_element.begin_list_uchar(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_u8(), count, list)?;
+                        } else {
+                            raw_element.set_list_uchar(property_name, self.__read_binary_list(reader, |r| r.read_u8(), count)?);
+                        }
+                    }
+                    ScalarType::Short => {
+                        if let Some(list) = raw_element.begin_list_short(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_i16::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_short(property_name, self.__read_binary_list(reader, |r| r.read_i16::<B>(), count)?);
+                        }
+                    }
+                    ScalarType::UShort => {
+                        if let Some(list) = raw_element.begin_list_ushort(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_u16::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_ushort(property_name, self.__read_binary_list(reader, |r| r.read_u16::<B>(), count)?);
+                        }
+                    }
+                    ScalarType::Int => {
+                        if let Some(list) = raw_element.begin_list_int(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_i32::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_int(property_name, self.__read_binary_list(reader, |r| r.read_i32::<B>(), count)?);
+                        }
+                    }
+                    ScalarType::UInt => {
+                        if let Some(list) = raw_element.begin_list_uint(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_u32::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_uint(property_name, self.__read_binary_list(reader, |r| r.read_u32::<B>(), count)?);
+                        }
+                    }
+                    ScalarType::Float => {
+                        if let Some(list) = raw_element.begin_list_float(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_f32::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_float(property_name, self.__read_binary_list(reader, |r| r.read_f32::<B>(), count)?);
+                        }
+                    }
+                    ScalarType::Double => {
+                        if let Some(list) = raw_element.begin_list_double(property_name, count) {
+                            self.__read_binary_list_into(reader, |r| r.read_f64::<B>(), count, list)?;
+                        } else {
+                            raw_element.set_list_double(property_name, self.__read_binary_list(reader, |r| r.read_f64::<B>(), count)?);
+                        }
+                    }
                 }
             }
-        };
-        Ok(result)
+        }
+        Ok(())
     }
-    fn __read_binary_list<T: Read, D: FromStr>(&self, reader: &mut T, read_from: &dyn Fn(&mut T) -> Result<D>, count: usize) -> Result<Vec<D>>
-        where <D as FromStr>::Err: error::Error + Send + Sync + 'static {
-        let mut list = Vec::<D>::with_capacity(self.cap_preallocated_size(count));
+
+    fn __read_binary_list_count<T: Read, B: ByteOrder>(&self, reader: &mut T, index_type: &ScalarType) -> Result<usize> {
+        match *index_type {
+            ScalarType::Char => {
+                let v = reader.read_i8()?;
+                if v < 0 {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "List length cannot be negative (i8).",
+                    ));
+                }
+                usize::try_from(v as i64).map_err(|_| {
+                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                })
+            }
+            ScalarType::UChar => Ok(usize::from(reader.read_u8()?)),
+            ScalarType::Short => {
+                let v = reader.read_i16::<B>()?;
+                if v < 0 {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "List length cannot be negative (i16).",
+                    ));
+                }
+                usize::try_from(v as i64).map_err(|_| {
+                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                })
+            }
+            ScalarType::UShort => Ok(usize::from(reader.read_u16::<B>()?)),
+            ScalarType::Int => {
+                let v = reader.read_i32::<B>()?;
+                if v < 0 {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "List length cannot be negative (i32).",
+                    ));
+                }
+                usize::try_from(v as i64).map_err(|_| {
+                    io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+                })
+            }
+            ScalarType::UInt => usize::try_from(reader.read_u32::<B>()?).map_err(|_| {
+                io::Error::new(ErrorKind::InvalidInput, "List length does not fit into usize.")
+            }),
+            ScalarType::Float => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, float declared in ScalarType.")),
+            ScalarType::Double => Err(io::Error::new(ErrorKind::InvalidInput, "Index of list must be an integer type, double declared in ScalarType.")),
+        }
+    }
+
+    fn __read_binary_list<T: Read, D, F>(&self, reader: &mut T, read_from: F, count: usize) -> Result<Vec<D>>
+        where F: Fn(&mut T) -> Result<D> {
+        let mut list = Vec::new();
+        self.__read_binary_list_into(reader, read_from, count, &mut list)?;
+        Ok(list)
+    }
+
+    fn __read_binary_list_into<T: Read, D, F>(&self, reader: &mut T, read_from: F, count: usize, list: &mut Vec<D>) -> Result<()>
+        where F: Fn(&mut T) -> Result<D> {
+        self.__prepare_list(list, count);
         for i in 0..count {
             let value : D = match read_from(reader) {
                 Err(e) => return Err(io::Error::new(
@@ -657,7 +798,7 @@ impl<E: PropertyAccess> Parser<E> {
             };
             list.push(value);
         }
-        Ok(list)
+        Ok(())
     }
 }
 

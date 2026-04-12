@@ -304,3 +304,76 @@ fn writer_binary_element_writes_multiple_scalar_and_list_variants() {
     assert_eq!(written, 1 + 1 + 2 + 2 + 8 + 1 + 12);
     assert_eq!(out.len(), written);
 }
+
+#[derive(Debug)]
+struct DirectParseElem {
+    x: f32,
+    labels: Vec<i32>,
+}
+
+impl PropertyAccess for DirectParseElem {
+    fn new() -> Self {
+        Self {
+            x: 0.0,
+            labels: vec![-1, -1],
+        }
+    }
+
+    fn set_property(&mut self, property_name: &str, _property: Property) {
+        panic!("optimized parser should not call set_property for '{property_name}'");
+    }
+
+    fn set_float(&mut self, property_name: &str, value: f32) {
+        match property_name {
+            "x" => self.x = value,
+            other => panic!("unexpected float property: {other}"),
+        }
+    }
+
+    fn begin_list_int(&mut self, property_name: &str, _len: usize) -> Option<&mut Vec<i32>> {
+        (property_name == "labels").then_some(&mut self.labels)
+    }
+}
+
+fn optimized_elem_def() -> ElementDef {
+    let mut def = ElementDef::new("vertex".to_string());
+    def.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    def.properties.add(PropertyDef::new(
+        "labels".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Int),
+    ));
+    def
+}
+
+#[test]
+fn parser_ascii_custom_hooks_bypass_set_property() {
+    let p = parser::Parser::<DirectParseElem>::new();
+    let elem = p
+        .read_ascii_element("1.5 3 1 2 3", &optimized_elem_def())
+        .expect("should parse");
+
+    assert_eq!(elem.x, 1.5);
+    assert_eq!(elem.labels, vec![1, 2, 3]);
+}
+
+#[test]
+fn parser_binary_custom_hooks_fill_final_list_storage() {
+    let p = parser::Parser::<DirectParseElem>::new();
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&1.5f32.to_le_bytes());
+    bytes.push(3);
+    bytes.extend_from_slice(&1i32.to_le_bytes());
+    bytes.extend_from_slice(&2i32.to_le_bytes());
+    bytes.extend_from_slice(&3i32.to_le_bytes());
+
+    let mut cur = Cursor::new(bytes);
+    let elem = p
+        .read_little_endian_element(&mut cur, &optimized_elem_def())
+        .expect("should parse");
+
+    assert_eq!(elem.x, 1.5);
+    assert_eq!(elem.labels, vec![1, 2, 3]);
+}

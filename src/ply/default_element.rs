@@ -20,6 +20,19 @@ pub type DefaultElement = KeyMap<Property>;
 macro_rules! get(
     ($e:expr) => (match $e {None => return None, Some(x) => x})
 );
+macro_rules! begin_list {
+    ($name:ident, $variant:ident, $ty:ty) => {
+        fn $name(&mut self, key: &str, _len: usize) -> Option<&mut Vec<$ty>> {
+            if !self.contains_key(key) {
+                self.insert(key.to_string(), Property::$variant(Vec::new()));
+            }
+            match self.get_mut(key) {
+                Some(Property::$variant(values)) => Some(values),
+                _ => None,
+            }
+        }
+    };
+}
 impl PropertyAccess for DefaultElement {
     fn new() -> Self {
         DefaultElement::new()
@@ -27,6 +40,14 @@ impl PropertyAccess for DefaultElement {
     fn set_property(&mut self, key: &str, property: Property) {
         self.insert(key.to_string(), property);
     }
+    begin_list!(begin_list_char, ListChar, i8);
+    begin_list!(begin_list_uchar, ListUChar, u8);
+    begin_list!(begin_list_short, ListShort, i16);
+    begin_list!(begin_list_ushort, ListUShort, u16);
+    begin_list!(begin_list_int, ListInt, i32);
+    begin_list!(begin_list_uint, ListUInt, u32);
+    begin_list!(begin_list_float, ListFloat, f32);
+    begin_list!(begin_list_double, ListDouble, f64);
     fn get_char(&self, key: &str) -> Option<i8> {
         match *get!(self.get(key)) {
             Property::Char(x) => Some(x),
