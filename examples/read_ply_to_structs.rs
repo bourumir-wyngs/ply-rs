@@ -1,5 +1,6 @@
 use ply_rs_bw::parser;
 use ply_rs_bw::ply;
+use ply_rs_bw::ply::PropertyAccessResult;
 
 /// We know what data we want to read, so we can parse straight into our own structs.
 #[derive(Debug)] // Not necessary for parsing, only for printing at the end of the example.
@@ -24,13 +25,14 @@ impl ply::PropertyAccess for Vertex {
             z: 0.0,
         }
     }
-    fn set_property(&mut self, key: &str, property: ply::Property) {
+    fn set_property(&mut self, key: &str, property: ply::Property) -> PropertyAccessResult {
         match (key, property) {
             ("x", ply::Property::Float(v)) => self.x = v,
             ("y", ply::Property::Float(v)) => self.y = v,
             ("z", ply::Property::Float(v)) => self.z = v,
             (k, _) => panic!("Vertex: Unexpected key/value combination: key: {}", k),
         }
+        PropertyAccessResult::Set
     }
 }
 
@@ -41,11 +43,12 @@ impl ply::PropertyAccess for Face {
             vertex_index: Vec::new(),
         }
     }
-    fn set_property(&mut self, key: &str, property: ply::Property) {
+    fn set_property(&mut self, key: &str, property: ply::Property) -> PropertyAccessResult {
         match (key, property) {
             ("vertex_index", ply::Property::ListInt(vec)) => self.vertex_index = vec,
             (k, _) => panic!("Face: Unexpected key/value combination: key: {}", k),
         }
+        PropertyAccessResult::Set
     }
 }
 

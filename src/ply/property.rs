@@ -3,6 +3,7 @@
 //! PLY payload values are dynamically typed according to the header. This module
 //! provides:
 //! - [`Property`] as an enum covering all supported scalar and list payload values.
+//!   It also exposes convenience conversion helpers for common consumer-side coercions.
 //! - [`ScalarType`] / [`PropertyType`] to describe the types declared in the header.
 //! - [`PropertyAccess`] to allow parsing/writing payloads into custom data structures.
 
@@ -88,6 +89,144 @@ pub enum Property {
     ListDouble(Vec<f64>),
 }
 
+impl Property {
+    /// Converts any scalar numeric property to `f32` using Rust's standard casts.
+    ///
+    /// Returns `None` for list properties.
+    pub fn to_f32_lossy(&self) -> Option<f32> {
+        match self {
+            Self::Char(v) => Some(*v as f32),
+            Self::UChar(v) => Some(*v as f32),
+            Self::Short(v) => Some(*v as f32),
+            Self::UShort(v) => Some(*v as f32),
+            Self::Int(v) => Some(*v as f32),
+            Self::UInt(v) => Some(*v as f32),
+            Self::Float(v) => Some(*v),
+            Self::Double(v) => Some(*v as f32),
+            Self::ListChar(_)
+            | Self::ListUChar(_)
+            | Self::ListShort(_)
+            | Self::ListUShort(_)
+            | Self::ListInt(_)
+            | Self::ListUInt(_)
+            | Self::ListFloat(_)
+            | Self::ListDouble(_) => None,
+        }
+    }
+
+    /// Converts any scalar numeric property to a `u8` color component.
+    ///
+    /// Integer inputs are cast directly.
+    /// Floating-point inputs are interpreted as normalized values in `0.0..=1.0`
+    /// and scaled to `0..=255` before casting.
+    ///
+    /// Returns `None` for list properties.
+    pub fn to_u8_color_lossy(&self) -> Option<u8> {
+        match self {
+            Self::Char(v) => Some(*v as u8),
+            Self::UChar(v) => Some(*v),
+            Self::Short(v) => Some(*v as u8),
+            Self::UShort(v) => Some(*v as u8),
+            Self::Int(v) => Some(*v as u8),
+            Self::UInt(v) => Some(*v as u8),
+            Self::Float(v) => Some((*v * 255.0) as u8),
+            Self::Double(v) => Some((*v * 255.0) as u8),
+            Self::ListChar(_)
+            | Self::ListUChar(_)
+            | Self::ListShort(_)
+            | Self::ListUShort(_)
+            | Self::ListInt(_)
+            | Self::ListUInt(_)
+            | Self::ListFloat(_)
+            | Self::ListDouble(_) => None,
+        }
+    }
+
+    /// Returns the bytes of an unsigned-char list property.
+    pub fn as_list_uchar(&self) -> Option<&[u8]> {
+        match self {
+            Self::ListUChar(values) => Some(values),
+            Self::Char(_)
+            | Self::UChar(_)
+            | Self::Short(_)
+            | Self::UShort(_)
+            | Self::Int(_)
+            | Self::UInt(_)
+            | Self::Float(_)
+            | Self::Double(_)
+            | Self::ListChar(_)
+            | Self::ListShort(_)
+            | Self::ListUShort(_)
+            | Self::ListInt(_)
+            | Self::ListUInt(_)
+            | Self::ListFloat(_)
+            | Self::ListDouble(_) => None,
+        }
+    }
+
+    /// Converts any integer list property to a `Vec<u32>`.
+    ///
+    /// Signed list values must be non-negative to succeed.
+    /// Returns `None` for scalar properties and floating-point lists.
+    pub fn to_u32_list(&self) -> Option<Vec<u32>> {
+        let collect_signed = |values: &[i32]| {
+            values
+                .iter()
+                .copied()
+                .map(u32::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .ok()
+        };
+        let collect_short = |values: &[i16]| {
+            values
+                .iter()
+                .copied()
+                .map(u32::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .ok()
+        };
+        let collect_char = |values: &[i8]| {
+            values
+                .iter()
+                .copied()
+                .map(u32::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .ok()
+        };
+
+        match self {
+            Self::ListChar(values) => collect_char(values),
+            Self::ListUChar(values) => Some(values.iter().copied().map(u32::from).collect()),
+            Self::ListShort(values) => collect_short(values),
+            Self::ListUShort(values) => Some(values.iter().copied().map(u32::from).collect()),
+            Self::ListInt(values) => collect_signed(values),
+            Self::ListUInt(values) => Some(values.clone()),
+            Self::Char(_)
+            | Self::UChar(_)
+            | Self::Short(_)
+            | Self::UShort(_)
+            | Self::Int(_)
+            | Self::UInt(_)
+            | Self::Float(_)
+            | Self::Double(_)
+            | Self::ListFloat(_)
+            | Self::ListDouble(_) => None,
+        }
+    }
+}
+
+/// Outcome returned by [`PropertyAccess`] setter methods.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum PropertyAccessResult {
+    /// The property was accepted and written into the destination element.
+    Set,
+    /// The property was intentionally ignored.
+    Ignored,
+    /// The property name is known, but the declared PLY type cannot be consumed by the
+    /// destination element implementation.
+    UnsupportedType,
+}
+
 /// Provides setters and getters for the Parser and the Writer.
 ///
 /// This trait allows you to create your own data structure for the case that the
@@ -99,6 +238,8 @@ pub enum Property {
 /// If you know, that you only expect unsigned shorts, don't bother about implementing signed shorts or floats, it won't be called.
 /// Overriding the typed setters or list-begin hooks lets the parser bypass intermediate
 /// [`Property`] construction and, for list properties, fill your destination `Vec` directly.
+/// Returning [`PropertyAccessResult::UnsupportedType`] from a setter causes the parser to
+/// surface an `InvalidData` error with property context.
 ///
 /// The getters are named in congruence with `PropertyType` and `ScalarType`.
 pub trait PropertyAccess {
@@ -106,89 +247,90 @@ pub trait PropertyAccess {
     fn new() -> Self;
 
     /// Sets the property value for the given property name.
-    fn set_property(&mut self, _property_name: &str, _property: Property) {
+    fn set_property(&mut self, _property_name: &str, _property: Property) -> PropertyAccessResult {
         // By default, do nothing
         // Sombody might only want to write, no point in bothering him/her with setter implementations.
+        PropertyAccessResult::Ignored
     }
 
     /// Sets the property value as a signed 8-bit integer (`char`).
-    fn set_char(&mut self, property_name: &str, value: i8) {
-        self.set_property(property_name, Property::Char(value));
+    fn set_char(&mut self, property_name: &str, value: i8) -> PropertyAccessResult {
+        self.set_property(property_name, Property::Char(value))
     }
 
     /// Sets the property value as an unsigned 8-bit integer (`uchar`).
-    fn set_uchar(&mut self, property_name: &str, value: u8) {
-        self.set_property(property_name, Property::UChar(value));
+    fn set_uchar(&mut self, property_name: &str, value: u8) -> PropertyAccessResult {
+        self.set_property(property_name, Property::UChar(value))
     }
 
     /// Sets the property value as a signed 16-bit integer (`short`).
-    fn set_short(&mut self, property_name: &str, value: i16) {
-        self.set_property(property_name, Property::Short(value));
+    fn set_short(&mut self, property_name: &str, value: i16) -> PropertyAccessResult {
+        self.set_property(property_name, Property::Short(value))
     }
 
     /// Sets the property value as an unsigned 16-bit integer (`ushort`).
-    fn set_ushort(&mut self, property_name: &str, value: u16) {
-        self.set_property(property_name, Property::UShort(value));
+    fn set_ushort(&mut self, property_name: &str, value: u16) -> PropertyAccessResult {
+        self.set_property(property_name, Property::UShort(value))
     }
 
     /// Sets the property value as a signed 32-bit integer (`int`).
-    fn set_int(&mut self, property_name: &str, value: i32) {
-        self.set_property(property_name, Property::Int(value));
+    fn set_int(&mut self, property_name: &str, value: i32) -> PropertyAccessResult {
+        self.set_property(property_name, Property::Int(value))
     }
 
     /// Sets the property value as an unsigned 32-bit integer (`uint`).
-    fn set_uint(&mut self, property_name: &str, value: u32) {
-        self.set_property(property_name, Property::UInt(value));
+    fn set_uint(&mut self, property_name: &str, value: u32) -> PropertyAccessResult {
+        self.set_property(property_name, Property::UInt(value))
     }
 
     /// Sets the property value as a 32-bit floating point number (`float`).
-    fn set_float(&mut self, property_name: &str, value: f32) {
-        self.set_property(property_name, Property::Float(value));
+    fn set_float(&mut self, property_name: &str, value: f32) -> PropertyAccessResult {
+        self.set_property(property_name, Property::Float(value))
     }
 
     /// Sets the property value as a 64-bit floating point number (`double`).
-    fn set_double(&mut self, property_name: &str, value: f64) {
-        self.set_property(property_name, Property::Double(value));
+    fn set_double(&mut self, property_name: &str, value: f64) -> PropertyAccessResult {
+        self.set_property(property_name, Property::Double(value))
     }
 
     /// Sets the property value as a list of signed 8-bit integers.
-    fn set_list_char(&mut self, property_name: &str, value: Vec<i8>) {
-        self.set_property(property_name, Property::ListChar(value));
+    fn set_list_char(&mut self, property_name: &str, value: Vec<i8>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListChar(value))
     }
 
     /// Sets the property value as a list of unsigned 8-bit integers.
-    fn set_list_uchar(&mut self, property_name: &str, value: Vec<u8>) {
-        self.set_property(property_name, Property::ListUChar(value));
+    fn set_list_uchar(&mut self, property_name: &str, value: Vec<u8>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListUChar(value))
     }
 
     /// Sets the property value as a list of signed 16-bit integers.
-    fn set_list_short(&mut self, property_name: &str, value: Vec<i16>) {
-        self.set_property(property_name, Property::ListShort(value));
+    fn set_list_short(&mut self, property_name: &str, value: Vec<i16>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListShort(value))
     }
 
     /// Sets the property value as a list of unsigned 16-bit integers.
-    fn set_list_ushort(&mut self, property_name: &str, value: Vec<u16>) {
-        self.set_property(property_name, Property::ListUShort(value));
+    fn set_list_ushort(&mut self, property_name: &str, value: Vec<u16>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListUShort(value))
     }
 
     /// Sets the property value as a list of signed 32-bit integers.
-    fn set_list_int(&mut self, property_name: &str, value: Vec<i32>) {
-        self.set_property(property_name, Property::ListInt(value));
+    fn set_list_int(&mut self, property_name: &str, value: Vec<i32>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListInt(value))
     }
 
     /// Sets the property value as a list of unsigned 32-bit integers.
-    fn set_list_uint(&mut self, property_name: &str, value: Vec<u32>) {
-        self.set_property(property_name, Property::ListUInt(value));
+    fn set_list_uint(&mut self, property_name: &str, value: Vec<u32>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListUInt(value))
     }
 
     /// Sets the property value as a list of 32-bit floating point numbers.
-    fn set_list_float(&mut self, property_name: &str, value: Vec<f32>) {
-        self.set_property(property_name, Property::ListFloat(value));
+    fn set_list_float(&mut self, property_name: &str, value: Vec<f32>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListFloat(value))
     }
 
     /// Sets the property value as a list of 64-bit floating point numbers.
-    fn set_list_double(&mut self, property_name: &str, value: Vec<f64>) {
-        self.set_property(property_name, Property::ListDouble(value));
+    fn set_list_double(&mut self, property_name: &str, value: Vec<f64>) -> PropertyAccessResult {
+        self.set_property(property_name, Property::ListDouble(value))
     }
 
     /// Returns mutable access to the destination storage for a signed 8-bit list property.
@@ -421,7 +563,10 @@ mod tests {
     #[test]
     fn test_property_access_defaults() {
         let mut dummy = Dummy::new();
-        dummy.set_property("foo", Property::Char(42));
+        assert_eq!(
+            dummy.set_property("foo", Property::Char(42)),
+            PropertyAccessResult::Ignored
+        );
 
         assert_eq!(dummy.get_char("foo"), None);
         assert_eq!(dummy.get_uchar("foo"), None);
@@ -439,5 +584,49 @@ mod tests {
         assert_eq!(dummy.get_list_uint("foo"), None);
         assert_eq!(dummy.get_list_float("foo"), None);
         assert_eq!(dummy.get_list_double("foo"), None);
+    }
+
+    #[test]
+    fn test_property_to_f32_lossy() {
+        assert_eq!(Property::Char(-5).to_f32_lossy(), Some(-5.0));
+        assert_eq!(Property::UChar(5).to_f32_lossy(), Some(5.0));
+        assert_eq!(Property::Short(-10).to_f32_lossy(), Some(-10.0));
+        assert_eq!(Property::UShort(10).to_f32_lossy(), Some(10.0));
+        assert_eq!(Property::Int(-15).to_f32_lossy(), Some(-15.0));
+        assert_eq!(Property::UInt(15).to_f32_lossy(), Some(15.0));
+        assert_eq!(Property::Float(1.5).to_f32_lossy(), Some(1.5));
+        assert_eq!(Property::Double(2.5).to_f32_lossy(), Some(2.5));
+        assert_eq!(Property::ListUInt(vec![1, 2]).to_f32_lossy(), None);
+    }
+
+    #[test]
+    fn test_property_to_u8_color_lossy() {
+        assert_eq!(Property::UChar(17).to_u8_color_lossy(), Some(17));
+        assert_eq!(Property::Short(300).to_u8_color_lossy(), Some(44));
+        assert_eq!(Property::Float(0.5).to_u8_color_lossy(), Some(127));
+        assert_eq!(Property::Double(1.0).to_u8_color_lossy(), Some(255));
+        assert_eq!(Property::ListUChar(vec![1, 2]).to_u8_color_lossy(), None);
+    }
+
+    #[test]
+    fn test_property_as_list_uchar() {
+        let prop = Property::ListUChar(vec![72, 105]);
+        assert_eq!(prop.as_list_uchar(), Some(&b"Hi"[..]));
+        assert_eq!(Property::ListInt(vec![72, 105]).as_list_uchar(), None);
+    }
+
+    #[test]
+    fn test_property_to_u32_list() {
+        assert_eq!(
+            Property::ListUChar(vec![1, 2, 3]).to_u32_list(),
+            Some(vec![1, 2, 3])
+        );
+        assert_eq!(
+            Property::ListInt(vec![1, 2, 3]).to_u32_list(),
+            Some(vec![1, 2, 3])
+        );
+        assert_eq!(Property::ListInt(vec![-1, 2]).to_u32_list(), None);
+        assert_eq!(Property::ListFloat(vec![1.0, 2.0]).to_u32_list(), None);
+        assert_eq!(Property::UInt(7).to_u32_list(), None);
     }
 }

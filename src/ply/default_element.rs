@@ -6,6 +6,7 @@
 use super::KeyMap;
 use super::Property;
 use super::PropertyAccess;
+use super::PropertyAccessResult;
 
 /// Ready to use data-structure for all kind of element definitions.
 ///
@@ -37,8 +38,9 @@ impl PropertyAccess for DefaultElement {
     fn new() -> Self {
         DefaultElement::new()
     }
-    fn set_property(&mut self, key: &str, property: Property) {
+    fn set_property(&mut self, key: &str, property: Property) -> PropertyAccessResult {
         self.insert(key.to_string(), property);
+        PropertyAccessResult::Set
     }
     begin_list!(begin_list_char, ListChar, i8);
     begin_list!(begin_list_uchar, ListUChar, u8);

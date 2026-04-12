@@ -269,7 +269,7 @@ impl<E: PropertyAccess> Parser<E> {
 }
 
 // use ply::{ Header, Encoding };
-use crate::ply::{Addable, Comment, ElementDef, KeyMap, ObjInfo, PropertyAccess, Version};
+use crate::ply::{Addable, Comment, ElementDef, KeyMap, ObjInfo, PropertyAccess, PropertyAccessResult, Version};
 /*
 use util::LocationTracker;
 use super::Parser;
@@ -542,12 +542,13 @@ impl<E: PropertyAccess> Parser<E> {
             let element = match self.read_ascii_element(&line_str, element_def) {
                 Ok(e) => e,
                 Err(e) => {
-                    return parse_ascii_rethrow(
-                        location,
-                        &line_str,
-                        e,
-                        "Couldn't read element line.",
-                    );
+                    return Err(ParseError::with_line(
+                        e.kind(),
+                        location.line_index,
+                        format!(
+                            "Couldn't read element line.\n\tString: '{line_str}'\n\tError: {e}"
+                        ),
+                    ));
                 }
             };
             elems.push(element);
@@ -610,16 +611,19 @@ impl<E: PropertyAccess> Parser<E> {
         let s = self.__next_ascii_token(elem_iter, data_type)?;
 
         match *data_type {
-            PropertyType::Scalar(ref scalar_type) => match *scalar_type {
-                ScalarType::Char => vals.set_char(property_name, self.parse(s)?),
-                ScalarType::UChar => vals.set_uchar(property_name, self.parse(s)?),
-                ScalarType::Short => vals.set_short(property_name, self.parse(s)?),
-                ScalarType::UShort => vals.set_ushort(property_name, self.parse(s)?),
-                ScalarType::Int => vals.set_int(property_name, self.parse(s)?),
-                ScalarType::UInt => vals.set_uint(property_name, self.parse(s)?),
-                ScalarType::Float => vals.set_float(property_name, self.parse(s)?),
-                ScalarType::Double => vals.set_double(property_name, self.parse(s)?),
-            },
+            PropertyType::Scalar(ref scalar_type) => {
+                let result = match *scalar_type {
+                    ScalarType::Char => vals.set_char(property_name, self.parse(s)?),
+                    ScalarType::UChar => vals.set_uchar(property_name, self.parse(s)?),
+                    ScalarType::Short => vals.set_short(property_name, self.parse(s)?),
+                    ScalarType::UShort => vals.set_ushort(property_name, self.parse(s)?),
+                    ScalarType::Int => vals.set_int(property_name, self.parse(s)?),
+                    ScalarType::UInt => vals.set_uint(property_name, self.parse(s)?),
+                    ScalarType::Float => vals.set_float(property_name, self.parse(s)?),
+                    ScalarType::Double => vals.set_double(property_name, self.parse(s)?),
+                };
+                self.__handle_property_access_result(property_name, data_type, result)?;
+            }
             PropertyType::List(_, ref scalar_type) => {
                 let count: usize = self.parse(s)?;
                 match *scalar_type {
@@ -627,86 +631,111 @@ impl<E: PropertyAccess> Parser<E> {
                         if let Some(list) = vals.begin_list_char(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_char(
+                            let result = vals.set_list_char(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UChar => {
                         if let Some(list) = vals.begin_list_uchar(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_uchar(
+                            let result = vals.set_list_uchar(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Short => {
                         if let Some(list) = vals.begin_list_short(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_short(
+                            let result = vals.set_list_short(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UShort => {
                         if let Some(list) = vals.begin_list_ushort(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_ushort(
+                            let result = vals.set_list_ushort(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Int => {
                         if let Some(list) = vals.begin_list_int(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_int(
+                            let result = vals.set_list_int(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UInt => {
                         if let Some(list) = vals.begin_list_uint(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_uint(
+                            let result = vals.set_list_uint(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Float => {
                         if let Some(list) = vals.begin_list_float(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_float(
+                            let result = vals.set_list_float(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Double => {
                         if let Some(list) = vals.begin_list_double(property_name, count) {
                             self.__read_ascii_list_into(elem_iter, count, list)?;
                         } else {
-                            vals.set_list_double(
+                            let result = vals.set_list_double(
                                 property_name,
                                 self.__read_ascii_list(elem_iter, count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    fn __handle_property_access_result(
+        &self,
+        property_name: &str,
+        data_type: &PropertyType,
+        result: PropertyAccessResult,
+    ) -> Result<()> {
+        match result {
+            PropertyAccessResult::Set | PropertyAccessResult::Ignored => Ok(()),
+            PropertyAccessResult::UnsupportedType => Err(ParseError::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "PLY property '{property_name}' with declared type {data_type:?} is unsupported by the destination element"
+                ),
+            )),
+        }
     }
 
     fn parse<D: FromStr>(&self, s: &str) -> Result<D>
@@ -887,20 +916,29 @@ impl<E: PropertyAccess> Parser<E> {
         data_type: &PropertyType,
     ) -> Result<()> {
         match *data_type {
-            PropertyType::Scalar(ref scalar_type) => match *scalar_type {
-                ScalarType::Char => raw_element.set_char(property_name, reader.read_i8()?),
-                ScalarType::UChar => raw_element.set_uchar(property_name, reader.read_u8()?),
-                ScalarType::Short => raw_element.set_short(property_name, reader.read_i16::<B>()?),
-                ScalarType::UShort => {
-                    raw_element.set_ushort(property_name, reader.read_u16::<B>()?)
-                }
-                ScalarType::Int => raw_element.set_int(property_name, reader.read_i32::<B>()?),
-                ScalarType::UInt => raw_element.set_uint(property_name, reader.read_u32::<B>()?),
-                ScalarType::Float => raw_element.set_float(property_name, reader.read_f32::<B>()?),
-                ScalarType::Double => {
-                    raw_element.set_double(property_name, reader.read_f64::<B>()?)
-                }
-            },
+            PropertyType::Scalar(ref scalar_type) => {
+                let result = match *scalar_type {
+                    ScalarType::Char => raw_element.set_char(property_name, reader.read_i8()?),
+                    ScalarType::UChar => raw_element.set_uchar(property_name, reader.read_u8()?),
+                    ScalarType::Short => {
+                        raw_element.set_short(property_name, reader.read_i16::<B>()?)
+                    }
+                    ScalarType::UShort => {
+                        raw_element.set_ushort(property_name, reader.read_u16::<B>()?)
+                    }
+                    ScalarType::Int => raw_element.set_int(property_name, reader.read_i32::<B>()?),
+                    ScalarType::UInt => {
+                        raw_element.set_uint(property_name, reader.read_u32::<B>()?)
+                    }
+                    ScalarType::Float => {
+                        raw_element.set_float(property_name, reader.read_f32::<B>()?)
+                    }
+                    ScalarType::Double => {
+                        raw_element.set_double(property_name, reader.read_f64::<B>()?)
+                    }
+                };
+                self.__handle_property_access_result(property_name, data_type, result)?;
+            }
             PropertyType::List(ref index_type, ref property_type) => {
                 let count = self.__read_binary_list_count::<T, B>(reader, index_type)?;
                 match *property_type {
@@ -913,10 +951,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_char(
+                            let result = raw_element.set_list_char(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i8()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UChar => {
@@ -928,10 +967,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_uchar(
+                            let result = raw_element.set_list_uchar(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u8()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Short => {
@@ -943,10 +983,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_short(
+                            let result = raw_element.set_list_short(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i16::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UShort => {
@@ -958,10 +999,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_ushort(
+                            let result = raw_element.set_list_ushort(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u16::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Int => {
@@ -973,10 +1015,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_int(
+                            let result = raw_element.set_list_int(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_i32::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::UInt => {
@@ -988,10 +1031,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_uint(
+                            let result = raw_element.set_list_uint(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_u32::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Float => {
@@ -1003,10 +1047,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_float(
+                            let result = raw_element.set_list_float(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_f32::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                     ScalarType::Double => {
@@ -1018,10 +1063,11 @@ impl<E: PropertyAccess> Parser<E> {
                                 list,
                             )?;
                         } else {
-                            raw_element.set_list_double(
+                            let result = raw_element.set_list_double(
                                 property_name,
                                 self.__read_binary_list(reader, |r| Ok(r.read_f64::<B>()?), count)?,
                             );
+                            self.__handle_property_access_result(property_name, data_type, result)?;
                         }
                     }
                 }

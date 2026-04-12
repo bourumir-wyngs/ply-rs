@@ -10,10 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking changes
 - Incremental parser APIs are now stateful: `Parser::read_header`, `Parser::read_payload`, and `Parser::read_payload_for_element` require `parser::Reader<T>` instead of a bare `BufRead`. This preserves stream position and file-relative diagnostics across split parsing.
 - Parser APIs now return `parser::ParseError` instead of `std::io::Error`. `ParseError` exposes `kind()` and optional `line()` accessors and can be converted back into `std::io::Error` when needed.
+- `ply::PropertyAccess` setters now return `ply::PropertyAccessResult` instead of `()`, allowing implementations to distinguish ignored properties from known-but-unsupported PLY types.
 
 ### Added
 - `parser::Reader<T>` for header-first and element-by-element parsing without resetting parser state.
 - Regression tests covering file-relative line numbers for split payload parsing, including repeated `read_payload_for_element` calls across multiple element types.
+- `ply::Property` conversion helpers for common PLY consumer tasks:
+  - `to_f32_lossy`
+  - `to_u8_color_lossy`
+  - `as_list_uchar`
+  - `to_u32_list`
+
+### Changed
+- The parser now turns `PropertyAccessResult::UnsupportedType` into `InvalidData` errors with property/type context, and preserves that error kind through ASCII payload line wrapping.
 
 ## [3.0.3] - 2026-03-29
 - Fixed ASCII writer panic on elements with no properties

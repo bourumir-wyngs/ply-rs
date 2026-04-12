@@ -437,13 +437,16 @@ impl PropertyAccess for DirectParseElem {
         }
     }
 
-    fn set_property(&mut self, property_name: &str, _property: Property) {
+    fn set_property(&mut self, property_name: &str, _property: Property) -> PropertyAccessResult {
         panic!("optimized parser should not call set_property for '{property_name}'");
     }
 
-    fn set_float(&mut self, property_name: &str, value: f32) {
+    fn set_float(&mut self, property_name: &str, value: f32) -> PropertyAccessResult {
         match property_name {
-            "x" => self.x = value,
+            "x" => {
+                self.x = value;
+                PropertyAccessResult::Set
+            }
             other => panic!("unexpected float property: {other}"),
         }
     }
@@ -494,4 +497,34 @@ fn parser_binary_custom_hooks_fill_final_list_storage() {
 
     assert_eq!(elem.x, 1.5);
     assert_eq!(elem.labels, vec![1, 2, 3]);
+}
+
+#[derive(Debug)]
+struct RejectFloatElem;
+
+impl PropertyAccess for RejectFloatElem {
+    fn new() -> Self {
+        Self
+    }
+
+    fn set_float(&mut self, property_name: &str, _value: f32) -> PropertyAccessResult {
+        match property_name {
+            "x" => PropertyAccessResult::UnsupportedType,
+            other => panic!("unexpected float property: {other}"),
+        }
+    }
+}
+
+#[test]
+fn parser_reports_unsupported_destination_property_types() {
+    let p = parser::Parser::<RejectFloatElem>::new();
+    let mut def = ElementDef::new("vertex".to_string());
+    def.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+
+    let err = p.read_ascii_element("1.5", &def).expect_err("should fail");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("PLY property 'x'"));
 }
