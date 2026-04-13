@@ -841,7 +841,7 @@ impl<E: PropertyAccess> Parser<E> {
         out.clear();
         let desired_capacity = self.cap_preallocated_size(count);
         if out.capacity() < desired_capacity {
-            out.reserve(desired_capacity - out.capacity());
+            out.reserve(desired_capacity);
         }
     }
 
@@ -1431,6 +1431,17 @@ mod tests {
         assert_eq!(p.cap_preallocated_size(100_000), 50_000);
         assert_eq!(p.cap_preallocated_size(1_048_577), 32_769);
         assert_eq!(p.cap_preallocated_size(usize::MAX), 65_536);
+    }
+    #[test]
+    fn prepare_list_reserves_final_capacity_for_reused_vec() {
+        let p = Parser::<DefaultElement>::new();
+        let mut out = Vec::with_capacity(7);
+        out.extend(0u8..7);
+
+        p.__prepare_list(&mut out, 8);
+
+        assert!(out.is_empty());
+        assert!(out.capacity() >= 8);
     }
     #[test]
     fn read_property_ok() {
