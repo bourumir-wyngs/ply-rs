@@ -67,15 +67,18 @@ fn create_tetrahedron_ply() -> Ply<DefaultElement> {
 
     // Define vertex element with x, y, z properties
     let mut vertex_element = ElementDef::new("vertex".to_string());
-    vertex_element
-        .properties
-        .add(PropertyDef::new("x".to_string(), PropertyType::Scalar(ScalarType::Float)));
-    vertex_element
-        .properties
-        .add(PropertyDef::new("y".to_string(), PropertyType::Scalar(ScalarType::Float)));
-    vertex_element
-        .properties
-        .add(PropertyDef::new("z".to_string(), PropertyType::Scalar(ScalarType::Float)));
+    vertex_element.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    vertex_element.properties.add(PropertyDef::new(
+        "y".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    vertex_element.properties.add(PropertyDef::new(
+        "z".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
     ply.header.elements.add(vertex_element);
 
     // Define face element with vertex_indices list property
@@ -116,10 +119,7 @@ fn create_tetrahedron_ply() -> Ply<DefaultElement> {
     let mut face_list = Vec::new();
     for indices in faces {
         let mut face = DefaultElement::new();
-        face.insert(
-            "vertex_indices".to_string(),
-            Property::ListInt(indices),
-        );
+        face.insert("vertex_indices".to_string(), Property::ListInt(indices));
         face_list.push(face);
     }
     ply.payload.insert("face".to_string(), face_list);

@@ -1,4 +1,3 @@
-
 use ply_rs_bw::parser::Parser;
 use ply_rs_bw::ply::DefaultElement;
 use std::fs::File;
@@ -29,13 +28,16 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
     // PLY may have internally different types.
     if let Some(vertices_elem) = ply.payload.get("vertex") {
         for vertex in vertices_elem {
-            let x = vertex.get("x")
+            let x = vertex
+                .get("x")
                 .and_then(ply_rs_bw::ply::Property::to_f32_lossy)
                 .expect("Unexpected type for vertex x");
-            let y = vertex.get("y")
+            let y = vertex
+                .get("y")
                 .and_then(ply_rs_bw::ply::Property::to_f32_lossy)
                 .expect("Unexpected type for vertex y");
-            let z = vertex.get("z")
+            let z = vertex
+                .get("z")
                 .and_then(ply_rs_bw::ply::Property::to_f32_lossy)
                 .expect("Unexpected type for vertex z");
 
@@ -45,7 +47,8 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
 
     if let Some(faces_elem) = ply.payload.get("face") {
         for (i, face) in faces_elem.iter().enumerate() {
-            let triangle = face.get("vertex_indices")
+            let triangle = face
+                .get("vertex_indices")
                 .and_then(ply_rs_bw::ply::Property::to_u32_list)
                 .unwrap_or_else(|| panic!("Missing or invalid 'vertex_indices' for face {}", i));
 
@@ -69,7 +72,10 @@ fn print_ply_data(data: (Vec<[f32; 3]>, Vec<[u32; 3]>)) {
 
     println!("Vertices:");
     for (i, vertex) in vertices.iter().enumerate() {
-        println!("  {}: [{:.3}, {:.3}, {:.3}]", i, vertex[0], vertex[1], vertex[2]);
+        println!(
+            "  {}: [{:.3}, {:.3}, {:.3}]",
+            i, vertex[0], vertex[1], vertex[2]
+        );
     }
 
     println!("Indices:");
@@ -78,11 +84,18 @@ fn print_ply_data(data: (Vec<[f32; 3]>, Vec<[u32; 3]>)) {
     }
 }
 
-
 fn main() {
     // The output from four lines below must be identical.
-    print_ply_data(read_mesh("example_plys/diverse_field_formats/doubles_ints.ply"));
-    print_ply_data(read_mesh("example_plys/diverse_field_formats/doubles_shorts.ply"));
-    print_ply_data(read_mesh("example_plys/diverse_field_formats/floats_ints.ply"));
-    print_ply_data(read_mesh("example_plys/diverse_field_formats/floats_shorts.ply"));
+    print_ply_data(read_mesh(
+        "example_plys/diverse_field_formats/doubles_ints.ply",
+    ));
+    print_ply_data(read_mesh(
+        "example_plys/diverse_field_formats/doubles_shorts.ply",
+    ));
+    print_ply_data(read_mesh(
+        "example_plys/diverse_field_formats/floats_ints.ply",
+    ));
+    print_ply_data(read_mesh(
+        "example_plys/diverse_field_formats/floats_shorts.ply",
+    ));
 }

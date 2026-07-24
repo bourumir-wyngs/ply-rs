@@ -49,7 +49,7 @@ pub enum PropertyType {
     /// list length/flexibility against storage size. Though this obviously depends on your specific use case.
     ///
     /// Second value is the type of the list elements.
-    List(ScalarType, ScalarType)
+    List(ScalarType, ScalarType),
 }
 
 /// Wrapper used to implement a dynamic type system as required by the PLY file format.
@@ -542,8 +542,14 @@ mod tests {
         assert_eq!(Property::ListUShort(vec![0]), Property::ListUShort(vec![0]));
         assert_eq!(Property::ListInt(vec![0]), Property::ListInt(vec![0]));
         assert_eq!(Property::ListUInt(vec![0]), Property::ListUInt(vec![0]));
-        assert_eq!(Property::ListFloat(vec![0.0]), Property::ListFloat(vec![0.0]));
-        assert_eq!(Property::ListDouble(vec![0.0]), Property::ListDouble(vec![0.0]));
+        assert_eq!(
+            Property::ListFloat(vec![0.0]),
+            Property::ListFloat(vec![0.0])
+        );
+        assert_eq!(
+            Property::ListDouble(vec![0.0]),
+            Property::ListDouble(vec![0.0])
+        );
     }
 
     #[test]
@@ -587,7 +593,10 @@ mod tests {
         assert_eq!(dummy.get_list_float("foo"), None);
         assert_eq!(dummy.get_list_double("foo"), None);
 
-        assert!(matches!(dummy.begin_list_int("foo", 0), BeginList::UseSetter));
+        assert!(matches!(
+            dummy.begin_list_int("foo", 0),
+            BeginList::UseSetter
+        ));
     }
 
     #[test]

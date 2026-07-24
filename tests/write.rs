@@ -1,6 +1,6 @@
-use ply_rs_bw::*;
 use ply_rs_bw::ply::*;
-use std::io::{ BufReader, ErrorKind, Read };
+use ply_rs_bw::*;
+use std::io::{BufReader, ErrorKind, Read};
 
 type Ply = ply::Ply<DefaultElement>;
 
@@ -20,7 +20,7 @@ fn write_buff(ply: &Ply) -> Vec<u8> {
 
 fn read_write_ply(ply: &Ply) -> Ply {
     println!("writing ply:\n{:?}", ply);
-    let ve : Vec<u8> = write_buff(ply);
+    let ve: Vec<u8> = write_buff(ply);
     let txt = String::from_utf8(ve.clone()).unwrap();
     println!("written ply:\n{}", txt);
     let mut buff = BufReader::new(&(*ve));
@@ -83,7 +83,10 @@ fn create_list_elements() -> Ply {
     let mut ply = Ply::new();
 
     let mut e = ElementDef::new("aList".to_string());
-    let p = PropertyDef::new("x".to_string(), PropertyType::List(ScalarType::Int, ScalarType::Int));
+    let p = PropertyDef::new(
+        "x".to_string(),
+        PropertyType::List(ScalarType::Int, ScalarType::Int),
+    );
     e.properties.add(p);
 
     let mut list = Vec::new();
@@ -138,7 +141,8 @@ fn write_ascii_element_with_no_properties() {
     ply.header.elements.add(empty_element);
 
     ply.payload.insert("empty".to_string(), vec![KeyMap::new()]);
-    ply.make_consistent().expect("test setup should produce consistent ply");
+    ply.make_consistent()
+        .expect("test setup should produce consistent ply");
 
     let mut out = Vec::<u8>::new();
     let writer = writer::Writer::<DefaultElement>::new();
@@ -154,18 +158,18 @@ fn write_ascii_element_with_no_properties() {
 // Helper function for binary write-read round-trip tests
 fn read_write_binary_ply(ply: &Ply, encoding: Encoding) -> Ply {
     println!("writing ply with encoding {:?}:\n{:?}", encoding, ply);
-    
+
     // Create a copy with the desired encoding
     let mut ply_to_write = ply.clone();
     ply_to_write.header.encoding = encoding;
-    
+
     let ve: Vec<u8> = write_buff(&ply_to_write);
     println!("written {} bytes", ve.len());
-    
+
     let mut buff = BufReader::new(&(*ve));
     let new_ply = read_buff(&mut buff);
     println!("read ply:\n{:?}", new_ply);
-    
+
     // Compare header (encoding should match)
     assert_eq!(ply_to_write.header, new_ply.header);
     // Compare payload
@@ -219,7 +223,8 @@ fn write_binary_rejects_list_length_overflow_for_index_type() {
         Property::ListUChar((0..=255).collect()),
     );
     ply.payload.insert("face".to_string(), vec![face]);
-    ply.make_consistent().expect("test setup should produce consistent ply");
+    ply.make_consistent()
+        .expect("test setup should produce consistent ply");
 
     let mut out = Vec::<u8>::new();
     let writer = writer::Writer::<DefaultElement>::new();
@@ -242,9 +247,18 @@ fn create_tetrahedron_ply(encoding: Encoding) -> Ply {
 
     // Define vertex element with x, y, z properties
     let mut vertex_element = ElementDef::new("vertex".to_string());
-    vertex_element.properties.add(PropertyDef::new("x".to_string(), PropertyType::Scalar(ScalarType::Float)));
-    vertex_element.properties.add(PropertyDef::new("y".to_string(), PropertyType::Scalar(ScalarType::Float)));
-    vertex_element.properties.add(PropertyDef::new("z".to_string(), PropertyType::Scalar(ScalarType::Float)));
+    vertex_element.properties.add(PropertyDef::new(
+        "x".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    vertex_element.properties.add(PropertyDef::new(
+        "y".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    vertex_element.properties.add(PropertyDef::new(
+        "z".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
     ply.header.elements.add(vertex_element);
 
     // Define face element with vertex_indices list property
@@ -274,12 +288,7 @@ fn create_tetrahedron_ply(encoding: Encoding) -> Ply {
     ply.payload.insert("vertex".to_string(), vertex_list);
 
     // Add the 4 triangular faces
-    let faces = vec![
-        vec![0, 1, 2],
-        vec![0, 3, 1],
-        vec![0, 2, 3],
-        vec![1, 3, 2],
-    ];
+    let faces = vec![vec![0, 1, 2], vec![0, 3, 1], vec![0, 2, 3], vec![1, 3, 2]];
 
     let mut face_list = Vec::new();
     for indices in faces {
@@ -297,16 +306,16 @@ fn create_tetrahedron_ply(encoding: Encoding) -> Ply {
 fn read_tetrahedron_ascii() {
     // To regenerate: cargo run --example write_tetrahedron
     // Then copy example_plys/tetrahedron_ascii.ply to the test location
-    
+
     let file_bytes: &[u8] = include_bytes!("../example_plys/tetrahedron_ascii.ply");
     let mut reader = BufReader::new(file_bytes);
     let ply_read = read_buff(&mut reader);
-    
+
     let expected = create_tetrahedron_ply(Encoding::Ascii);
-    
+
     assert_eq!(expected.header, ply_read.header);
     assert_eq!(expected.payload, ply_read.payload);
-    
+
     // Round-trip: write and read back
     let written = write_buff(&ply_read);
     let mut reader2 = BufReader::new(&written[..]);
@@ -318,16 +327,16 @@ fn read_tetrahedron_ascii() {
 fn read_tetrahedron_binary_little_endian() {
     // To regenerate: cargo run --example write_tetrahedron
     // Then copy example_plys/tetrahedron_little_endian.ply to the test location
-    
+
     let file_bytes: &[u8] = include_bytes!("../example_plys/tetrahedron_little_endian.ply");
     let mut reader = BufReader::new(file_bytes);
     let ply_read = read_buff(&mut reader);
-    
+
     let expected = create_tetrahedron_ply(Encoding::BinaryLittleEndian);
-    
+
     assert_eq!(expected.header, ply_read.header);
     assert_eq!(expected.payload, ply_read.payload);
-    
+
     // Round-trip: write and read back
     let written = write_buff(&ply_read);
     let mut reader2 = BufReader::new(&written[..]);
@@ -339,16 +348,16 @@ fn read_tetrahedron_binary_little_endian() {
 fn read_tetrahedron_binary_big_endian() {
     // To regenerate: cargo run --example write_tetrahedron
     // Then copy example_plys/tetrahedron_big_endian.ply to the test location
-    
+
     let file_bytes: &[u8] = include_bytes!("../example_plys/tetrahedron_big_endian.ply");
     let mut reader = BufReader::new(file_bytes);
     let ply_read = read_buff(&mut reader);
-    
+
     let expected = create_tetrahedron_ply(Encoding::BinaryBigEndian);
-    
+
     assert_eq!(expected.header, ply_read.header);
     assert_eq!(expected.payload, ply_read.payload);
-    
+
     // Round-trip: write and read back
     let written = write_buff(&ply_read);
     let mut reader2 = BufReader::new(&written[..]);
@@ -359,43 +368,88 @@ fn read_tetrahedron_binary_big_endian() {
 fn create_all_scalars_ply() -> Ply {
     let mut ply = Ply::new();
     let mut e = ElementDef::new("scalars".to_string());
-    
+
     // Add property definitions
-    e.properties.add(PropertyDef::new("c".to_string(), PropertyType::Scalar(ScalarType::Char)));
-    e.properties.add(PropertyDef::new("uc".to_string(), PropertyType::Scalar(ScalarType::UChar)));
-    e.properties.add(PropertyDef::new("s".to_string(), PropertyType::Scalar(ScalarType::Short)));
-    e.properties.add(PropertyDef::new("us".to_string(), PropertyType::Scalar(ScalarType::UShort)));
-    e.properties.add(PropertyDef::new("i".to_string(), PropertyType::Scalar(ScalarType::Int)));
-    e.properties.add(PropertyDef::new("ui".to_string(), PropertyType::Scalar(ScalarType::UInt)));
-    e.properties.add(PropertyDef::new("f".to_string(), PropertyType::Scalar(ScalarType::Float)));
-    e.properties.add(PropertyDef::new("d".to_string(), PropertyType::Scalar(ScalarType::Double)));
+    e.properties.add(PropertyDef::new(
+        "c".to_string(),
+        PropertyType::Scalar(ScalarType::Char),
+    ));
+    e.properties.add(PropertyDef::new(
+        "uc".to_string(),
+        PropertyType::Scalar(ScalarType::UChar),
+    ));
+    e.properties.add(PropertyDef::new(
+        "s".to_string(),
+        PropertyType::Scalar(ScalarType::Short),
+    ));
+    e.properties.add(PropertyDef::new(
+        "us".to_string(),
+        PropertyType::Scalar(ScalarType::UShort),
+    ));
+    e.properties.add(PropertyDef::new(
+        "i".to_string(),
+        PropertyType::Scalar(ScalarType::Int),
+    ));
+    e.properties.add(PropertyDef::new(
+        "ui".to_string(),
+        PropertyType::Scalar(ScalarType::UInt),
+    ));
+    e.properties.add(PropertyDef::new(
+        "f".to_string(),
+        PropertyType::Scalar(ScalarType::Float),
+    ));
+    e.properties.add(PropertyDef::new(
+        "d".to_string(),
+        PropertyType::Scalar(ScalarType::Double),
+    ));
 
     ply.header.elements.add(e);
 
     let mut payload = Vec::new();
 
     // Helper to add a row
-    let add_row = |c: i8, uc: u8, s: i16, us: u16, i: i32, ui: u32, f: f32, d: f64| -> DefaultElement {
-         let mut p = KeyMap::new();
-         p.insert("c".to_string(), Property::Char(c));
-         p.insert("uc".to_string(), Property::UChar(uc));
-         p.insert("s".to_string(), Property::Short(s));
-         p.insert("us".to_string(), Property::UShort(us));
-         p.insert("i".to_string(), Property::Int(i));
-         p.insert("ui".to_string(), Property::UInt(ui));
-         p.insert("f".to_string(), Property::Float(f));
-         p.insert("d".to_string(), Property::Double(d));
-         p
-    };
+    let add_row =
+        |c: i8, uc: u8, s: i16, us: u16, i: i32, ui: u32, f: f32, d: f64| -> DefaultElement {
+            let mut p = KeyMap::new();
+            p.insert("c".to_string(), Property::Char(c));
+            p.insert("uc".to_string(), Property::UChar(uc));
+            p.insert("s".to_string(), Property::Short(s));
+            p.insert("us".to_string(), Property::UShort(us));
+            p.insert("i".to_string(), Property::Int(i));
+            p.insert("ui".to_string(), Property::UInt(ui));
+            p.insert("f".to_string(), Property::Float(f));
+            p.insert("d".to_string(), Property::Double(d));
+            p
+        };
 
     // Element 1: Min values
-    payload.push(add_row(i8::MIN, u8::MIN, i16::MIN, u16::MIN, i32::MIN, u32::MIN, f32::MIN, f64::MIN));
+    payload.push(add_row(
+        i8::MIN,
+        u8::MIN,
+        i16::MIN,
+        u16::MIN,
+        i32::MIN,
+        u32::MIN,
+        f32::MIN,
+        f64::MIN,
+    ));
     // Element 2: Max values
-    payload.push(add_row(i8::MAX, u8::MAX, i16::MAX, u16::MAX, i32::MAX, u32::MAX, f32::MAX, f64::MAX));
+    payload.push(add_row(
+        i8::MAX,
+        u8::MAX,
+        i16::MAX,
+        u16::MAX,
+        i32::MAX,
+        u32::MAX,
+        f32::MAX,
+        f64::MAX,
+    ));
     // Element 3: Zero
     payload.push(add_row(0, 0, 0, 0, 0, 0, 0.0, 0.0));
     // Element 4: Mixed
-    payload.push(add_row(-12, 200, -1000, 50000, -100000, 3000000, 1.234e-5, -9.876e10));
+    payload.push(add_row(
+        -12, 200, -1000, 50000, -100000, 3000000, 1.234e-5, -9.876e10,
+    ));
 
     ply.payload.insert("scalars".to_string(), payload);
     ply.make_consistent().unwrap();
@@ -405,16 +459,40 @@ fn create_all_scalars_ply() -> Ply {
 fn create_all_lists_ply() -> Ply {
     let mut ply = Ply::new();
     let mut e = ElementDef::new("lists".to_string());
-    
+
     // Add property definitions - using UChar as length type for simplicity
-    e.properties.add(PropertyDef::new("lc".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Char)));
-    e.properties.add(PropertyDef::new("luc".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::UChar)));
-    e.properties.add(PropertyDef::new("ls".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Short)));
-    e.properties.add(PropertyDef::new("lus".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::UShort)));
-    e.properties.add(PropertyDef::new("li".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Int)));
-    e.properties.add(PropertyDef::new("lui".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::UInt)));
-    e.properties.add(PropertyDef::new("lf".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Float)));
-    e.properties.add(PropertyDef::new("ld".to_string(), PropertyType::List(ScalarType::UChar, ScalarType::Double)));
+    e.properties.add(PropertyDef::new(
+        "lc".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Char),
+    ));
+    e.properties.add(PropertyDef::new(
+        "luc".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::UChar),
+    ));
+    e.properties.add(PropertyDef::new(
+        "ls".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Short),
+    ));
+    e.properties.add(PropertyDef::new(
+        "lus".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::UShort),
+    ));
+    e.properties.add(PropertyDef::new(
+        "li".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Int),
+    ));
+    e.properties.add(PropertyDef::new(
+        "lui".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::UInt),
+    ));
+    e.properties.add(PropertyDef::new(
+        "lf".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Float),
+    ));
+    e.properties.add(PropertyDef::new(
+        "ld".to_string(),
+        PropertyType::List(ScalarType::UChar, ScalarType::Double),
+    ));
 
     ply.header.elements.add(e);
 
@@ -428,7 +506,10 @@ fn create_all_lists_ply() -> Ply {
     row1.insert("li".to_string(), Property::ListInt(vec![-10000, 20000]));
     row1.insert("lui".to_string(), Property::ListUInt(vec![10000, 20000]));
     row1.insert("lf".to_string(), Property::ListFloat(vec![1.1, -2.2, 3.3]));
-    row1.insert("ld".to_string(), Property::ListDouble(vec![1.1111111, -2.2222222]));
+    row1.insert(
+        "ld".to_string(),
+        Property::ListDouble(vec![1.1111111, -2.2222222]),
+    );
     payload.push(row1);
 
     // Empty lists

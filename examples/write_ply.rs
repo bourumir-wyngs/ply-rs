@@ -1,5 +1,8 @@
-use ply_rs_bw::ply::{ Ply, DefaultElement, Encoding, ElementDef, PropertyDef, PropertyType, ScalarType, Property, Addable };
-use ply_rs_bw::writer::{ Writer };
+use ply_rs_bw::ply::{
+    Addable, DefaultElement, ElementDef, Encoding, Ply, Property, PropertyDef, PropertyType,
+    ScalarType,
+};
+use ply_rs_bw::writer::Writer;
 
 /// Demonstrates simplest use case for writing to a file.
 fn main() {

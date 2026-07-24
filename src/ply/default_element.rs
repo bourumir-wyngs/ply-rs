@@ -3,9 +3,9 @@
 //! [`DefaultElement`] is the ready-to-use payload element type provided by this crate.
 //! It is a map from property name to [`Property`], preserving insertion order.
 
+use super::BeginList;
 use super::KeyMap;
 use super::Property;
-use super::BeginList;
 use super::PropertyAccess;
 use super::PropertyAccessResult;
 

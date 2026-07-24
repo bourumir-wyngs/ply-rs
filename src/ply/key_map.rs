@@ -4,9 +4,9 @@
 //! header). This module provides the [`KeyMap`] alias (currently backed by
 //! [`indexmap::IndexMap`]) and small helper traits used to keep names consistent.
 
-use indexmap::IndexMap;
 use super::ElementDef;
 use super::PropertyDef;
+use indexmap::IndexMap;
 
 /// Alias to reduce coupling with map implementation
 pub type KeyMap<V> = IndexMap<String, V>;
@@ -16,7 +16,6 @@ pub trait Addable<V: Key> {
     /// Takes a value that provides a key and stores it under the given key.
     fn add(&mut self, new_value: V);
 }
-
 
 impl<V: Key> Addable<V> for KeyMap<V> {
     fn add(&mut self, value: V) {

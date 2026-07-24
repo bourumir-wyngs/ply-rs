@@ -1,5 +1,5 @@
-use ply_rs_bw::ply::{ Ply, DefaultElement };
-use ply_rs_bw::writer::{ Writer };
+use ply_rs_bw::ply::{DefaultElement, Ply};
+use ply_rs_bw::writer::Writer;
 
 /// Demonstrates simplest use case for writing an empty PLY file.
 fn main() {

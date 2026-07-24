@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
-#![warn(missing_docs,
-        missing_debug_implementations,
-        missing_copy_implementations,
-        trivial_casts,
-        trivial_numeric_casts,
-        unstable_features,
-        unused_import_braces,
-        unused_qualifications)]
+#![warn(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
+)]
 
 //! Library for reading/writing ascii and binary PLY files.
 //!
@@ -32,5 +34,5 @@ pub mod writer;
 
 mod util;
 
-#[cfg(test)]
+#[cfg(doctest)]
 doc_comment::doctest!("../README.md");

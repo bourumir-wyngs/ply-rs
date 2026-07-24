@@ -14,37 +14,41 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - name: Clean
-      run: cargo clean
-    - name: Build
-      run: cargo build --verbose
-    - name: Clean again 1
-      run: cargo clean
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Clean again 2
-      run: cargo clean
-    - name: Build without features
-      run: cargo build --no-default-features --verbose
-    - name: Clean again 3
-      run: cargo clean
-    - name: Run tests without features
-      run: cargo test --no-default-features --verbose
-    - name: Clean again 4
-      run: cargo clean
-    - name: Build all examples
-      run: cargo build --examples
-    - name: Clean again 5
-      run: cargo clean
-    - name: Build all examples no default features
-      run: cargo build --examples --no-default-features
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
+      - name: Check formatting
+        run: cargo fmt --all -- --check
 
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Check documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --all-features
 
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Build without features
+        run: cargo build --no-default-features --verbose
+
+      - name: Run tests without features
+        run: cargo test --no-default-features --verbose
+
+      - name: Build all examples
+        run: cargo build --examples
+
+      - name: Build all examples without features
+        run: cargo build --examples --no-default-features

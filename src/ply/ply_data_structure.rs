@@ -3,11 +3,11 @@
 //! This module defines [`Ply`], its [`Header`], and the type definitions needed to
 //! describe element/property declarations.
 
-use std::fmt::{ Display, Formatter };
-use std::fmt;
-use super::PropertyType;
 use super::KeyMap;
 use super::PropertyAccess;
+use super::PropertyType;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 /// Models all necessary information to interact with a PLY file.
 ///
@@ -129,13 +129,11 @@ pub enum Encoding {
 
 impl Display for Encoding {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        f.write_str(
-            match *self {
-                Encoding::Ascii => "ascii",
-                Encoding::BinaryBigEndian => "binary_big_endian",
-                Encoding::BinaryLittleEndian => "binary_little_endian",
-            }
-        )
+        f.write_str(match *self {
+            Encoding::Ascii => "ascii",
+            Encoding::BinaryBigEndian => "binary_big_endian",
+            Encoding::BinaryLittleEndian => "binary_little_endian",
+        })
     }
 }
 
@@ -199,10 +197,7 @@ pub struct PropertyDef {
 impl PropertyDef {
     /// Creates a new property definition.
     pub fn new(name: String, data_type: PropertyType) -> Self {
-        PropertyDef {
-            name,
-            data_type,
-        }
+        PropertyDef { name, data_type }
     }
 }
 
