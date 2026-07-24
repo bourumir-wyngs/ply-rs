@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.0.1] - unreleased
 
 ### Added
+- README.md example is rewritten to use PropertyAccess. 
 - Expanded binary round-trip coverage to all scalar value types, list value types, integer list-index types, and both byte orders.
 - Added overflow regression coverage for `char`, `uchar`, `short`, and `ushort` list-length index types.
 - Added a Codecov pipeline job and README badge for continuously published test coverage.
