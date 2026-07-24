@@ -306,22 +306,21 @@ fn write_binary_big_endian_list_elements() {
     assert_eq!(ply.payload, new_ply.payload);
 }
 
-#[test]
-fn write_binary_rejects_list_length_overflow_for_index_type() {
+fn assert_binary_list_length_overflow(index_type: ScalarType, list_len: usize) {
     let mut ply = Ply::new();
     ply.header.encoding = Encoding::BinaryLittleEndian;
 
     let mut e = ElementDef::new("face".to_string());
     e.properties.add(PropertyDef::new(
         "vertex_indices".to_string(),
-        PropertyType::List(ScalarType::UChar, ScalarType::UChar),
+        PropertyType::List(index_type, ScalarType::UChar),
     ));
     ply.header.elements.add(e);
 
     let mut face = KeyMap::new();
     face.insert(
         "vertex_indices".to_string(),
-        Property::ListUChar((0..=255).collect()),
+        Property::ListUChar(vec![0; list_len]),
     );
     ply.payload.insert("face".to_string(), vec![face]);
     ply.make_consistent()
@@ -333,6 +332,18 @@ fn write_binary_rejects_list_length_overflow_for_index_type() {
         .write_ply_unchecked(&mut out, &ply)
         .expect_err("oversized list length should be rejected");
     assert_eq!(err.kind(), ErrorKind::InvalidInput);
+}
+
+#[test]
+fn write_binary_rejects_list_length_overflow_for_bounded_index_types() {
+    for (index_type, list_len) in [
+        (ScalarType::Char, i8::MAX as usize + 1),
+        (ScalarType::UChar, u8::MAX as usize + 1),
+        (ScalarType::Short, i16::MAX as usize + 1),
+        (ScalarType::UShort, u16::MAX as usize + 1),
+    ] {
+        assert_binary_list_length_overflow(index_type, list_len);
+    }
 }
 
 // ============================================================================
@@ -630,6 +641,32 @@ fn create_all_lists_ply() -> Ply {
     ply
 }
 
+fn create_all_list_index_types_ply() -> Ply {
+    let mut ply = Ply::new();
+    let mut element_def = ElementDef::new("index_types".to_string());
+    let mut element = DefaultElement::new();
+
+    for (name, index_type) in [
+        ("char", ScalarType::Char),
+        ("uchar", ScalarType::UChar),
+        ("short", ScalarType::Short),
+        ("ushort", ScalarType::UShort),
+        ("int", ScalarType::Int),
+        ("uint", ScalarType::UInt),
+    ] {
+        element_def.properties.add(PropertyDef::new(
+            name.to_string(),
+            PropertyType::List(index_type, ScalarType::Int),
+        ));
+        element.insert(name.to_string(), Property::ListInt(vec![-1, 0, 1]));
+    }
+
+    ply.header.elements.add(element_def);
+    ply.payload.insert("index_types".to_string(), vec![element]);
+    ply.make_consistent().unwrap();
+    ply
+}
+
 #[test]
 fn write_ascii_all_scalars() {
     let ply = create_all_scalars_ply();
@@ -640,4 +677,40 @@ fn write_ascii_all_scalars() {
 fn write_ascii_all_lists() {
     let ply = create_all_lists_ply();
     read_write_ply(&ply);
+}
+
+#[test]
+fn write_binary_little_endian_all_scalars() {
+    let ply = create_all_scalars_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryLittleEndian);
+}
+
+#[test]
+fn write_binary_big_endian_all_scalars() {
+    let ply = create_all_scalars_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryBigEndian);
+}
+
+#[test]
+fn write_binary_little_endian_all_lists() {
+    let ply = create_all_lists_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryLittleEndian);
+}
+
+#[test]
+fn write_binary_big_endian_all_lists() {
+    let ply = create_all_lists_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryBigEndian);
+}
+
+#[test]
+fn write_binary_little_endian_all_list_index_types() {
+    let ply = create_all_list_index_types_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryLittleEndian);
+}
+
+#[test]
+fn write_binary_big_endian_all_list_index_types() {
+    let ply = create_all_list_index_types_ply();
+    read_write_binary_ply(&ply, Encoding::BinaryBigEndian);
 }
