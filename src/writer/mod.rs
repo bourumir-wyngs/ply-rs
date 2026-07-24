@@ -315,9 +315,8 @@ impl<E: PropertyAccess> Writer<E> {
         header: &Header,
     ) -> Result<usize> {
         let mut written = 0;
-        let element_defs = &header.elements;
-        for (k, element_list) in payload {
-            let element_def = &element_defs[k];
+        for (key, element_def) in &header.elements {
+            let element_list = &payload[key];
             written += self.write_payload_of_element(out, element_list, element_def, header)?;
         }
         Ok(written)

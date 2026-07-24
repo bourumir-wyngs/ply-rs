@@ -107,6 +107,62 @@ fn create_list_elements() -> Ply {
     ply
 }
 
+fn create_reversed_payload_order(encoding: Encoding) -> Ply {
+    let mut ply = Ply::new();
+    ply.header.encoding = encoding;
+
+    for name in ["first", "second"] {
+        let mut element = ElementDef::new(name.to_string());
+        element.properties.add(PropertyDef::new(
+            "value".to_string(),
+            PropertyType::Scalar(ScalarType::Int),
+        ));
+        ply.header.elements.add(element);
+    }
+
+    for (name, value) in [("second", 2), ("first", 1)] {
+        let mut element = DefaultElement::new();
+        element.insert("value".to_string(), Property::Int(value));
+        ply.payload.insert(name.to_string(), vec![element]);
+    }
+
+    ply.make_consistent()
+        .expect("test setup should produce consistent ply");
+    ply
+}
+
+fn assert_payload_is_written_in_header_order(encoding: Encoding) {
+    let ply = create_reversed_payload_order(encoding);
+    let bytes = write_buff(&ply);
+    let parsed = read_buff(&mut bytes.as_slice());
+
+    assert_eq!(
+        parsed.payload["first"][0]["value"],
+        Property::Int(1),
+        "first payload section must contain first element data"
+    );
+    assert_eq!(
+        parsed.payload["second"][0]["value"],
+        Property::Int(2),
+        "second payload section must contain second element data"
+    );
+}
+
+#[test]
+fn write_ascii_payload_in_header_order() {
+    assert_payload_is_written_in_header_order(Encoding::Ascii);
+}
+
+#[test]
+fn write_binary_little_endian_payload_in_header_order() {
+    assert_payload_is_written_in_header_order(Encoding::BinaryLittleEndian);
+}
+
+#[test]
+fn write_binary_big_endian_payload_in_header_order() {
+    assert_payload_is_written_in_header_order(Encoding::BinaryBigEndian);
+}
+
 #[test]
 fn write_header_min() {
     let ply = create_min();
