@@ -100,9 +100,13 @@ impl<E: PropertyAccess> Writer<E> {
         Ok(written)
     }
 
+    fn write_bytes<T: Write>(&self, out: &mut T, bytes: &[u8]) -> Result<usize> {
+        out.write_all(bytes)?;
+        Ok(bytes.len())
+    }
+
     fn write_new_line<T: Write>(&self, out: &mut T) -> Result<usize> {
-        out.write_all(b"\n")?;
-        Ok(1)
+        self.write_bytes(out, b"\n")
     }
 }
 
@@ -126,7 +130,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Each PLY file must start with "ply\n".
     pub fn write_line_magic_number<T: Write>(&self, out: &mut T) -> Result<usize> {
         let mut written = 0;
-        written += out.write("ply".as_bytes())?;
+        written += self.write_bytes(out, "ply".as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -140,9 +144,12 @@ impl<E: PropertyAccess> Writer<E> {
         version: &Version,
     ) -> Result<usize> {
         let mut written = 0;
-        written += out.write("format ".as_bytes())?;
+        written += self.write_bytes(out, "format ".as_bytes())?;
         written += self.write_encoding(out, encoding)?;
-        written += out.write(format!(" {}.{}", version.major, version.minor).as_bytes())?;
+        written += self.write_bytes(
+            out,
+            format!(" {}.{}", version.major, version.minor).as_bytes(),
+        )?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -151,7 +158,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// A comment must not contain a line break and only consist of ascii characters.
     pub fn write_line_comment<T: Write>(&self, out: &mut T, comment: &Comment) -> Result<usize> {
         let mut written = 0;
-        written += out.write(format!("comment {}", comment).as_bytes())?;
+        written += self.write_bytes(out, format!("comment {}", comment).as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -160,7 +167,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// An object information line must not contain a line break and only consist of ASCII characters.
     pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> Result<usize> {
         let mut written = 0;
-        written += out.write(format!("obj_info {}", obj_info).as_bytes())?;
+        written += self.write_bytes(out, format!("obj_info {}", obj_info).as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -176,7 +183,10 @@ impl<E: PropertyAccess> Writer<E> {
         element: &ElementDef,
     ) -> Result<usize> {
         let mut written = 0;
-        written += out.write(format!("element {} {}", element.name, element.count).as_bytes())?;
+        written += self.write_bytes(
+            out,
+            format!("element {} {}", element.name, element.count).as_bytes(),
+        )?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -190,10 +200,10 @@ impl<E: PropertyAccess> Writer<E> {
         property: &PropertyDef,
     ) -> Result<usize> {
         let mut written = 0;
-        written += out.write("property ".as_bytes())?;
+        written += self.write_bytes(out, "property ".as_bytes())?;
         written += self.write_property_type(out, &property.data_type)?;
-        written += out.write(" ".as_bytes())?;
-        written += out.write(property.name.as_bytes())?;
+        written += self.write_bytes(out, " ".as_bytes())?;
+        written += self.write_bytes(out, property.name.as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -217,7 +227,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes `end_header\n`. This terminates the header. Each following byte belongs to the payload.
     pub fn write_line_end_header<T: Write>(&self, out: &mut T) -> Result<usize> {
         let mut written = 0;
-        written += out.write("end_header".as_bytes())?;
+        written += self.write_bytes(out, "end_header".as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -248,7 +258,7 @@ impl<E: PropertyAccess> Writer<E> {
             Encoding::BinaryBigEndian => "binary_big_endian",
             Encoding::BinaryLittleEndian => "binary_little_endian",
         };
-        out.write(s.as_bytes())
+        self.write_bytes(out, s.as_bytes())
     }
     fn write_property_type<T: Write>(
         &self,
@@ -258,7 +268,7 @@ impl<E: PropertyAccess> Writer<E> {
         match *data_type {
             PropertyType::Scalar(ref scalar_type) => self.write_scalar_type(out, scalar_type),
             PropertyType::List(ref index_type, ref content_type) => {
-                let mut written = out.write("list ".as_bytes())?;
+                let mut written = self.write_bytes(out, "list ".as_bytes())?;
                 match *index_type {
                     ScalarType::Float => {
                         return Err(io::Error::new(
@@ -275,23 +285,24 @@ impl<E: PropertyAccess> Writer<E> {
                     _ => (),
                 };
                 written += self.write_scalar_type(out, index_type)?;
-                written += out.write(" ".as_bytes())?;
+                written += self.write_bytes(out, " ".as_bytes())?;
                 written += self.write_scalar_type(out, content_type)?;
                 Ok(written)
             }
         }
     }
     fn write_scalar_type<T: Write>(&self, out: &mut T, scalar_type: &ScalarType) -> Result<usize> {
-        match *scalar_type {
-            ScalarType::Char => out.write("char".as_bytes()),
-            ScalarType::UChar => out.write("uchar".as_bytes()),
-            ScalarType::Short => out.write("short".as_bytes()),
-            ScalarType::UShort => out.write("ushort".as_bytes()),
-            ScalarType::Int => out.write("int".as_bytes()),
-            ScalarType::UInt => out.write("uint".as_bytes()),
-            ScalarType::Float => out.write("float".as_bytes()),
-            ScalarType::Double => out.write("double".as_bytes()),
-        }
+        let bytes = match *scalar_type {
+            ScalarType::Char => "char",
+            ScalarType::UChar => "uchar",
+            ScalarType::Short => "short",
+            ScalarType::UShort => "ushort",
+            ScalarType::Int => "int",
+            ScalarType::UInt => "uint",
+            ScalarType::Float => "float",
+            ScalarType::Double => "double",
+        };
+        self.write_bytes(out, bytes.as_bytes())
     }
 }
 /*
@@ -406,7 +417,7 @@ impl<E: PropertyAccess> Writer<E> {
         if let Some((_k, prop_type)) = p_iter.next() {
             written += self.write_ascii_property(out, element, prop_type)?;
             for (_name, prop_type) in p_iter {
-                written += out.write(" ".as_bytes())?;
+                written += self.write_bytes(out, " ".as_bytes())?;
                 written += self.write_ascii_property(out, element, prop_type)?;
             }
         }

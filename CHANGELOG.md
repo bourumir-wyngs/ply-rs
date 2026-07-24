@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Writer now serializes payload sections in header declaration order, preventing values from being associated with the wrong element type when header and payload insertion orders differ.
 - Added ASCII, binary little-endian, and binary big-endian round-trip regression tests for reversed payload insertion order.
+- Writer now completes every required header byte sequence with `write_all`, preventing silent truncation on output sinks that perform short writes.
+- Added a regression test using an output writer that accepts only one byte per call.
 
 ## [4.0.0] - 2026-04-12
 

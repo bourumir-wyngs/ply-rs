@@ -1,6 +1,6 @@
 use ply_rs_bw::ply::*;
 use ply_rs_bw::*;
-use std::io::{BufReader, ErrorKind, Read};
+use std::io::{self, BufReader, ErrorKind, Read, Write};
 
 type Ply = ply::Ply<DefaultElement>;
 
@@ -49,6 +49,25 @@ fn create_basic_header() -> Ply {
     ply.header.obj_infos.push(oi);
     assert!(ply.make_consistent().is_ok());
     ply
+}
+
+#[derive(Default)]
+struct OneByteWriter {
+    bytes: Vec<u8>,
+}
+
+impl Write for OneByteWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let Some(&byte) = buf.first() else {
+            return Ok(0);
+        };
+        self.bytes.push(byte);
+        Ok(1)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 fn create_single_elements() -> Ply {
@@ -175,6 +194,32 @@ fn write_basic_header() {
     let new_ply = read_write_ply(&ply);
     assert_eq!(ply, new_ply);
 }
+
+#[test]
+fn write_header_handles_short_writes() {
+    let mut ply = create_basic_header();
+    ply.header.encoding = Encoding::BinaryLittleEndian;
+    ply.header
+        .elements
+        .get_mut("point")
+        .expect("point element should exist")
+        .properties
+        .add(PropertyDef::new(
+            "indices".to_string(),
+            PropertyType::List(ScalarType::UChar, ScalarType::Int),
+        ));
+
+    let writer = writer::Writer::<DefaultElement>::new();
+    let mut expected = Vec::new();
+    let expected_count = writer.write_header(&mut expected, &ply.header).unwrap();
+
+    let mut actual = OneByteWriter::default();
+    let actual_count = writer.write_header(&mut actual, &ply.header).unwrap();
+
+    assert_eq!(actual.bytes, expected);
+    assert_eq!(actual_count, expected_count);
+}
+
 #[test]
 fn write_single_elements() {
     let ply = create_single_elements();
