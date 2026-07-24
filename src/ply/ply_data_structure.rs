@@ -171,7 +171,7 @@ impl ElementDef {
     ///
     /// The name should be unique for each element in a PLY file.
     ///
-    /// You should never need to set `count` manually, since it is set by the consistency check 
+    /// You should never need to set `count` manually, since it is set by the consistency check
     /// (see `make_consistent()` of `Ply`).
     ///
     /// No properties are set.

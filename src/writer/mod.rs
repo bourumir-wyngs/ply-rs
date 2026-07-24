@@ -75,6 +75,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// If problems can be corrected automatically, `ply` will be modified accordingly.
     ///
     /// Returns number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `ply` is inconsistent or if writing to `out` fails.
     pub fn write_ply<T: Write>(&self, out: &mut T, ply: &mut Ply<E>) -> Result<usize> {
         match ply.make_consistent() {
             Ok(()) => (),
@@ -93,6 +97,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// The user is responsible to provide a consistent `Ply`,
     /// if not, behaviour is undefined and might result
     /// in a corrupted output.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or the payload does not match its declarations.
     pub fn write_ply_unchecked<T: Write>(&self, out: &mut T, ply: &Ply<E>) -> Result<usize> {
         let mut written = 0;
         written += self.write_header(out, &ply.header)?;
@@ -129,6 +137,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes the magic number "ply" and a new line.
     ///
     /// Each PLY file must start with "ply\n".
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_magic_number<T: Write>(&self, out: &mut T) -> Result<usize> {
         let mut written = 0;
         written += self.write_bytes(out, "ply".as_bytes())?;
@@ -138,6 +150,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes `format <encoding> <version>`.
     ///
     /// Each PLY file must define its format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_format<T: Write>(
         &self,
         out: &mut T,
@@ -146,7 +162,7 @@ impl<E: PropertyAccess> Writer<E> {
     ) -> Result<usize> {
         let mut written = 0;
         written += self.write_bytes(out, "format ".as_bytes())?;
-        written += self.write_encoding(out, encoding)?;
+        written += self.write_encoding(out, *encoding)?;
         written += self.write_bytes(
             out,
             format!(" {}.{}", version.major, version.minor).as_bytes(),
@@ -157,6 +173,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes a comment line.
     ///
     /// A comment must not contain a line break and only consist of ascii characters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_comment<T: Write>(&self, out: &mut T, comment: &Comment) -> Result<usize> {
         let mut written = 0;
         written += self.write_bytes(out, format!("comment {comment}").as_bytes())?;
@@ -166,6 +186,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes an object information line.
     ///
     /// An object information line must not contain a line break and only consist of ASCII characters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> Result<usize> {
         let mut written = 0;
         written += self.write_bytes(out, format!("obj_info {obj_info}").as_bytes())?;
@@ -178,6 +202,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// It is directly followed by its property definitions.
     ///
     /// Make sure the header is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_element_definition<T: Write>(
         &self,
         out: &mut T,
@@ -195,6 +223,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// `property [list <index_type> <scalar_type> | <scalar_type>]`.
     ///
     /// Make sure the property definition is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or a list uses a floating-point index type.
     pub fn write_line_property_definition<T: Write>(
         &self,
         out: &mut T,
@@ -213,6 +245,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Convenience method to call `write_line_element_definition` and `write_line_property_definition` in the correct way.
     ///
     /// Make sure the element definition is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or a property definition is invalid.
     pub fn write_element_definition<T: Write>(
         &self,
         out: &mut T,
@@ -226,6 +262,10 @@ impl<E: PropertyAccess> Writer<E> {
         Ok(written)
     }
     /// Writes `end_header\n`. This terminates the header. Each following byte belongs to the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to `out` fails.
     pub fn write_line_end_header<T: Write>(&self, out: &mut T) -> Result<usize> {
         let mut written = 0;
         written += self.write_bytes(out, "end_header".as_bytes())?;
@@ -237,6 +277,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// It starts with writing the magic number "ply\n" and ends with "`end_header`".
     ///
     /// Make sure the header is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or a property definition is invalid.
     pub fn write_header<T: Write>(&self, out: &mut T, header: &Header) -> Result<usize> {
         let mut written = 0;
         written += self.write_line_magic_number(out)?;
@@ -253,8 +297,8 @@ impl<E: PropertyAccess> Writer<E> {
         written += self.write_line_end_header(out)?;
         Ok(written)
     }
-    fn write_encoding<T: Write>(&self, out: &mut T, encoding: &Encoding) -> Result<usize> {
-        let s = match *encoding {
+    fn write_encoding<T: Write>(&self, out: &mut T, encoding: Encoding) -> Result<usize> {
+        let s = match encoding {
             Encoding::Ascii => "ascii",
             Encoding::BinaryBigEndian => "binary_big_endian",
             Encoding::BinaryLittleEndian => "binary_little_endian",
@@ -320,6 +364,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Writes the payload of a `ply` (`ply.payload`).
     ///
     /// Make sure the Header is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or a payload value does not match its declaration.
     pub fn write_payload<T: Write>(
         &self,
         out: &mut T,
@@ -336,6 +384,10 @@ impl<E: PropertyAccess> Writer<E> {
     /// Write all elements as stored in the `element_list`.
     ///
     /// Make sure the header and the element definition is consistent with the payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or an element does not match its declaration.
     pub fn write_payload_of_element<T: Write>(
         &self,
         out: &mut T,
@@ -407,6 +459,10 @@ macro_rules! get_prop(
 /// # Ascii
 impl<E: PropertyAccess> Writer<E> {
     /// Write a single ascii formatted element.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or the element does not contain a declared property.
     pub fn write_ascii_element<T: Write>(
         &self,
         out: &mut T,
@@ -599,6 +655,10 @@ impl<E: PropertyAccess> Writer<E> {
 
     // private payload
     /// Write a single binary formatted element in big endian.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or the element does not match `element_def`.
     pub fn write_big_endian_element<T: Write>(
         &self,
         out: &mut T,
@@ -608,6 +668,10 @@ impl<E: PropertyAccess> Writer<E> {
         self.__write_binary_element::<T, BigEndian>(out, element, element_def)
     }
     /// Write a single binary formatted element in little endian.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing fails or the element does not match `element_def`.
     pub fn write_little_endian_element<T: Write>(
         &self,
         out: &mut T,

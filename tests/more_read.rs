@@ -105,7 +105,7 @@ fn read_diverse_field_formats() {
         for key in &["x", "y", "z"] {
             match vprops[*key].data_type {
                 PropertyType::Scalar(ref s) => assert_eq!(*s, coord_ty),
-                _ => panic!("vertex {key:?} should be scalar"),
+                PropertyType::List(..) => panic!("vertex {key:?} should be scalar"),
             }
         }
         // Check face list type
@@ -115,7 +115,7 @@ fn read_diverse_field_formats() {
                 assert_eq!(*len_ty, ScalarType::UChar);
                 assert_eq!(*item_ty, idx_ty);
             }
-            _ => panic!("vertex_indices should be a list"),
+            PropertyType::Scalar(_) => panic!("vertex_indices should be a list"),
         }
         // basic payload sanity
         assert_eq!(ply.payload["vertex"].len(), 3);

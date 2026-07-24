@@ -62,6 +62,11 @@ impl<E: PropertyAccess> Ply<E> {
     /// For maximal compatability, only ascii characters should be used but this is not checked.
     /// Every relevant string is checked to not contain line breaks.
     /// Identifiers are also checked to not contain white spaces.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an element has no declaration or if a name, comment, or object
+    /// information value violates the consistency requirements.
     pub fn make_consistent(&mut self) -> Result<(), ConsistencyError> {
         for (ek, _) in &self.header.elements {
             if !self.payload.contains_key(ek) {

@@ -560,7 +560,7 @@ fn create_all_scalars_ply() -> Ply {
     payload.push(add_row(0, 0, 0, 0, 0, 0, 0.0, 0.0));
     // Element 4: Mixed
     payload.push(add_row(
-        -12, 200, -1000, 50000, -100000, 3000000, 1.234e-5, -9.876e10,
+        -12, 200, -1000, 50000, -100_000, 3_000_000, 1.234e-5, -9.876e10,
     ));
 
     ply.payload.insert("scalars".to_string(), payload);
@@ -620,7 +620,7 @@ fn create_all_lists_ply() -> Ply {
     row1.insert("lf".to_string(), Property::ListFloat(vec![1.1, -2.2, 3.3]));
     row1.insert(
         "ld".to_string(),
-        Property::ListDouble(vec![1.1111111, -2.2222222]),
+        Property::ListDouble(vec![1.111_111_1, -2.222_222_2]),
     );
     payload.push(row1);
 

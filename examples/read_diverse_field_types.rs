@@ -9,6 +9,10 @@ use std::io::BufReader;
 /// This example focuses on real-world scenarios where fields may be represented using
 /// different types (e.g., `f32` vs `f64`, `u32` vs `i32`, etc.). To read PLY data
 /// from various sources, the reader must adapt to the types used in the input.
+///
+/// # Panics
+///
+/// Panics if the file cannot be opened or parsed, or if required mesh fields are absent or invalid.
 pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
     // Open the file
     let file = File::open(ply_file_path)
@@ -52,7 +56,10 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
                 .and_then(ply_rs_bw::ply::Property::to_u32_list)
                 .unwrap_or_else(|| panic!("Missing or invalid 'vertex_indices' for face {i}"));
 
-            assert!(triangle.len() >= 3, "Insufficient indices for a triangle in face {i}");
+            assert!(
+                triangle.len() >= 3,
+                "Insufficient indices for a triangle in face {i}"
+            );
 
             indices.push([triangle[0], triangle[1], triangle[2]]);
         }

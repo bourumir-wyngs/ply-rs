@@ -93,6 +93,11 @@ impl Property {
     /// Converts any scalar numeric property to `f32` using Rust's standard casts.
     ///
     /// Returns `None` for list properties.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "this API explicitly provides lossy scalar conversion"
+    )]
     #[must_use]
     pub fn to_f32_lossy(&self) -> Option<f32> {
         match self {
@@ -122,6 +127,11 @@ impl Property {
     /// and scaled to `0..=255` before casting.
     ///
     /// Returns `None` for list properties.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "this API explicitly provides lossy color conversion"
+    )]
     #[must_use]
     pub fn to_u8_color_lossy(&self) -> Option<u8> {
         match self {

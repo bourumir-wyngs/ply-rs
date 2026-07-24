@@ -182,27 +182,23 @@ mod struct_test_1 {
         let ply = read_from_bytes(GREG_TURK_EXAMPLE1_OK_ASCII);
 
         for (i, vertex) in vertex_list.iter().enumerate() {
-            let x = match ply.payload["vertex"][i]["x"] {
-                ply::Property::Float(v) => v,
-                _ => panic!("Unexpected property."),
+            let ply::Property::Float(x) = ply.payload["vertex"][i]["x"] else {
+                panic!("Unexpected property.");
             };
-            assert_eq!(vertex.x, x);
-            let y = match ply.payload["vertex"][i]["y"] {
-                ply::Property::Float(v) => v,
-                _ => panic!("Unexpected property."),
+            assert_eq!(vertex.x.to_bits(), x.to_bits());
+            let ply::Property::Float(y) = ply.payload["vertex"][i]["y"] else {
+                panic!("Unexpected property.");
             };
-            assert_eq!(vertex.y, y);
-            let z = match ply.payload["vertex"][i]["z"] {
-                ply::Property::Float(v) => v,
-                _ => panic!("Unexpected property."),
+            assert_eq!(vertex.y.to_bits(), y.to_bits());
+            let ply::Property::Float(z) = ply.payload["vertex"][i]["z"] else {
+                panic!("Unexpected property.");
             };
-            assert_eq!(vertex.z, z);
+            assert_eq!(vertex.z.to_bits(), z.to_bits());
         }
 
         for (i, face) in face_list.iter().enumerate() {
-            let v = match ply.payload["face"][i]["vertex_index"] {
-                ply::Property::ListInt(ref v) => v,
-                _ => panic!("Unexpected property."),
+            let ply::Property::ListInt(ref v) = ply.payload["face"][i]["vertex_index"] else {
+                panic!("Unexpected property.");
             };
             assert_eq!(face.vertex_index, *v);
         }

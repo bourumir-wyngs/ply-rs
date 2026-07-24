@@ -260,6 +260,10 @@ impl<E: PropertyAccess> Parser<E> {
     ///
     /// A PLY file starts with "ply\n". `read_ply` reads until all elements have been read as
     /// defined in the header of the PLY file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input cannot be read or contains an invalid PLY header or payload.
     pub fn read_ply<T: Read>(&self, source: &mut T) -> Result<Ply<E>> {
         let mut reader = Reader::new(BufReader::new(source));
         let header = self.read_header(&mut reader)?;
@@ -275,6 +279,10 @@ impl<E: PropertyAccess> Parser<E> {
     /// If you need to continue reading the payload from the same stream, prefer wrapping
     /// your reader in a [`Reader`] and calling [`Parser::read_header`], because this
     /// method creates an internal `BufReader` which may buffer past `end_header`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input cannot be read or contains an invalid PLY header.
     pub fn read_ply_header<T: Read>(&self, source: &mut T) -> Result<Header> {
         let mut reader = Reader::new(BufReader::new(source));
         self.read_header(&mut reader)
@@ -305,6 +313,10 @@ impl<E: PropertyAccess> Parser<E> {
     ///
     /// A PLY file starts with "ply\n". The header and the payload are separated by a line `end_header\n`.
     /// This method reads all header elements up to `end_header`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input cannot be read or the header is malformed or incomplete.
     pub fn read_header<T: BufRead>(&self, reader: &mut Reader<T>) -> Result<Header> {
         self.__read_header(&mut reader.inner, &mut reader.location)
     }
@@ -313,6 +325,10 @@ impl<E: PropertyAccess> Parser<E> {
     ///
     /// This is a low-level helper that exposes the header grammar; most callers
     /// should use [`Parser::read_header`] or [`Parser::read_ply`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `line` does not match the PLY header grammar.
     pub fn read_header_line(&self, line: &str) -> Result<Line> {
         match self.__read_header_line(line) {
             Ok(l) => Ok(l),
@@ -418,11 +434,10 @@ impl<E: PropertyAccess> Parser<E> {
                             &line_str,
                             &format!("Property '{p:?}' found without preceding element."),
                         );
-                    } else {
-                        let (_, mut e) = header_elements.pop().unwrap();
-                        e.properties.add(p);
-                        header_elements.add(e);
                     }
+                    let (_, mut e) = header_elements.pop().unwrap();
+                    e.properties.add(p);
+                    header_elements.add(e);
                 }
                 Ok(Line::EndHeader) => {
                     location.next_line();
@@ -432,18 +447,14 @@ impl<E: PropertyAccess> Parser<E> {
             location.next_line();
         }
 
-        let (encoding, version) = if let Some((encoding, version)) = header_form_ver {
-            (encoding, version)
-        } else {
+        let Some((encoding, version)) = header_form_ver else {
             return Err(ParseError::new(
                 ErrorKind::InvalidInput,
                 "No format line found.",
             ));
         };
 
-        let version = if let Some(version) = version {
-            version
-        } else {
+        let Some(version) = version else {
             return Err(ParseError::new(
                 ErrorKind::InvalidInput,
                 "Invalid version number.",
@@ -471,6 +482,11 @@ impl<E: PropertyAccess> Parser<E> {
     }
 
     /// Reads payload. Encoding is chosen according to the encoding field in `header`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the payload cannot be read, is malformed, or contains a property
+    /// unsupported by `E`.
     pub fn read_payload<T: BufRead>(
         &self,
         reader: &mut Reader<T>,
@@ -482,6 +498,11 @@ impl<E: PropertyAccess> Parser<E> {
     /// Reads entire list of elements from payload. Encoding is chosen according to `header`.
     ///
     /// Make sure to read the elements in the order as they are defined in the header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the element data cannot be read, is malformed, or contains a property
+    /// unsupported by `E`.
     pub fn read_payload_for_element<T: BufRead>(
         &self,
         reader: &mut Reader<T>,
@@ -583,15 +604,18 @@ impl<E: PropertyAccess> Parser<E> {
     /// Read a single element. Assume it is encoded in ascii.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the line does not match `element_def` or contains a property
+    /// unsupported by `E`.
     pub fn read_ascii_element(&self, line: &str, element_def: &ElementDef) -> Result<E> {
         let elems = match grammar::data_line(line) {
             Ok(e) => e,
             Err(ref e) => {
                 return Err(ParseError::new(
                     ErrorKind::InvalidInput,
-                    format!(
-                        "Couldn't parse element line.\n\tString: '{line}'\n\tError: {e}"
-                    ),
+                    format!("Couldn't parse element line.\n\tString: '{line}'\n\tError: {e}"),
                 ));
             }
         };
@@ -613,9 +637,7 @@ impl<E: PropertyAccess> Parser<E> {
             None => {
                 return Err(ParseError::new(
                     ErrorKind::InvalidInput,
-                    format!(
-                        "Expected element of type '{data_type:?}', but found nothing."
-                    ),
+                    format!("Expected element of type '{data_type:?}', but found nothing."),
                 ));
             }
             Some(x) => x,
@@ -870,14 +892,11 @@ impl<E: PropertyAccess> Parser<E> {
     {
         self.__prepare_list(out, count);
         for i in 0..count {
-            let s = match elem_iter.next() {
-                Some(s) => s,
-                None => {
-                    return Err(ParseError::new(
-                        ErrorKind::InvalidInput,
-                        format!("Expected {count} list elements, but found only {i}."),
-                    ));
-                }
+            let Some(s) = elem_iter.next() else {
+                return Err(ParseError::new(
+                    ErrorKind::InvalidInput,
+                    format!("Expected {count} list elements, but found only {i}."),
+                ));
             };
             match s.parse() {
                 Ok(v) => out.push(v),
@@ -914,6 +933,11 @@ impl<E: PropertyAccess> Parser<E> {
     /// Reads a single element as declared in `element_def`. Assumes big endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the element cannot be read, does not match `element_def`, or contains
+    /// a property unsupported by `E`.
     pub fn read_big_endian_element<T: Read>(
         &self,
         reader: &mut T,
@@ -925,6 +949,11 @@ impl<E: PropertyAccess> Parser<E> {
     /// Reads a single element as declared in `element_def`. Assumes little endian encoding.
     ///
     /// Make sure all elements are parsed in the order they are defined in the header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the element cannot be read, does not match `element_def`, or contains
+    /// a property unsupported by `E`.
     pub fn read_little_endian_element<T: Read>(
         &self,
         reader: &mut T,
@@ -1554,7 +1583,7 @@ mod tests {
         let e = Some(ElementDef {
             name: "vertex".to_string(),
             count: 8,
-            properties: Default::default(),
+            properties: KeyMap::default(),
         });
         assert_ok!(g::element("element vertex 8"), e);
     }

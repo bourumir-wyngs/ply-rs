@@ -625,7 +625,7 @@ fn parser_ascii_custom_hooks_bypass_set_property() {
         .read_ascii_element("1.5 3 1 2 3", &optimized_elem_def())
         .expect("should parse");
 
-    assert_eq!(elem.x, 1.5);
+    assert_eq!(elem.x.to_bits(), 1.5_f32.to_bits());
     assert_eq!(elem.labels, vec![1, 2, 3]);
 }
 
@@ -644,7 +644,7 @@ fn parser_binary_custom_hooks_fill_final_list_storage() {
         .read_little_endian_element(&mut cur, &optimized_elem_def())
         .expect("should parse");
 
-    assert_eq!(elem.x, 1.5);
+    assert_eq!(elem.x.to_bits(), 1.5_f32.to_bits());
     assert_eq!(elem.labels, vec![1, 2, 3]);
 }
 
