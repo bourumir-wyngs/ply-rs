@@ -12,7 +12,7 @@
 [![crates.io](https://img.shields.io/crates/d/ply-rs-bw.svg)](https://crates.io/crates/ply-rs-bw)
 [![docs.rs](https://docs.rs/ply-rs-bw/badge.svg)](https://docs.rs/ply-rs-bw)
 [![dependency status](https://deps.rs/crate/ply-rs-bw/latest/status.svg)](https://deps.rs/crate/ply-rs-bw/latest)
-[![Socket Badge](https://badge.socket.dev/cargo/package/ply-rs-bw)](https://badge.socket.dev/cargo/package/ply-rs-bw)
+[![Socket Badge](https://badge.socket.dev/cargo/package/ply-rs-bw)]([https://badge.socket.dev/cargo/package/ply-rs-bw](https://socket.dev/cargo/package/ply-rs-bw))
 
 This is a forked version of the [ply-rs](https://github.com/Fluci/ply-rs) project that was created to address the use of `linked-hash-map`
 to resolve [CVE-2020-25573](https://nvd.nist.gov/vuln/detail/CVE-2020-25573). Small changes in the API were made later to address practical use cases.
