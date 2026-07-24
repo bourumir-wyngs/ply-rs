@@ -718,3 +718,495 @@ fn parser_reports_unsupported_list_via_begin_list_binary() {
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(err.to_string().contains("PLY property 'labels'"));
 }
+
+#[derive(Debug)]
+struct SetterElement {
+    properties: KeyMap<Property>,
+}
+
+impl PropertyAccess for SetterElement {
+    fn new() -> Self {
+        Self {
+            properties: KeyMap::new(),
+        }
+    }
+
+    fn set_property(&mut self, property_name: &str, property: Property) -> PropertyAccessResult {
+        self.properties.insert(property_name.to_string(), property);
+        PropertyAccessResult::Set
+    }
+}
+
+fn all_list_types_def() -> ElementDef {
+    let mut def = ElementDef::new("lists".to_string());
+    for (name, scalar_type) in [
+        ("chars", ScalarType::Char),
+        ("uchars", ScalarType::UChar),
+        ("shorts", ScalarType::Short),
+        ("ushorts", ScalarType::UShort),
+        ("ints", ScalarType::Int),
+        ("uints", ScalarType::UInt),
+        ("floats", ScalarType::Float),
+        ("doubles", ScalarType::Double),
+    ] {
+        def.properties.add(PropertyDef::new(
+            name.to_string(),
+            PropertyType::List(ScalarType::UChar, scalar_type),
+        ));
+    }
+    def
+}
+
+fn assert_all_setter_lists(element: &SetterElement) {
+    assert_eq!(element.properties["chars"], Property::ListChar(vec![-1, 2]));
+    assert_eq!(
+        element.properties["uchars"],
+        Property::ListUChar(vec![3, 4])
+    );
+    assert_eq!(
+        element.properties["shorts"],
+        Property::ListShort(vec![-5, 6])
+    );
+    assert_eq!(
+        element.properties["ushorts"],
+        Property::ListUShort(vec![7, 8])
+    );
+    assert_eq!(element.properties["ints"], Property::ListInt(vec![-9, 10]));
+    assert_eq!(
+        element.properties["uints"],
+        Property::ListUInt(vec![11, 12])
+    );
+    assert_eq!(
+        element.properties["floats"],
+        Property::ListFloat(vec![1.5, -2.5])
+    );
+    assert_eq!(
+        element.properties["doubles"],
+        Property::ListDouble(vec![3.25, -4.5])
+    );
+}
+
+#[test]
+fn parser_ascii_uses_default_list_setters_for_all_scalar_types() {
+    let parser = parser::Parser::<SetterElement>::new();
+    let element = parser
+        .read_ascii_element(
+            "2 -1 2 2 3 4 2 -5 6 2 7 8 2 -9 10 2 11 12 2 1.5 -2.5 2 3.25 -4.5",
+            &all_list_types_def(),
+        )
+        .expect("all list types should parse through their default setters");
+
+    assert_all_setter_lists(&element);
+}
+
+#[test]
+fn parser_binary_uses_default_list_setters_for_all_scalar_types() {
+    let mut bytes = Vec::new();
+    bytes.push(2);
+    bytes.extend_from_slice(&(-1i8).to_ne_bytes());
+    bytes.extend_from_slice(&2i8.to_ne_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&[3, 4]);
+    bytes.push(2);
+    bytes.extend_from_slice(&(-5i16).to_le_bytes());
+    bytes.extend_from_slice(&6i16.to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&7u16.to_le_bytes());
+    bytes.extend_from_slice(&8u16.to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&(-9i32).to_le_bytes());
+    bytes.extend_from_slice(&10i32.to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&11u32.to_le_bytes());
+    bytes.extend_from_slice(&12u32.to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&1.5f32.to_le_bytes());
+    bytes.extend_from_slice(&(-2.5f32).to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(&3.25f64.to_le_bytes());
+    bytes.extend_from_slice(&(-4.5f64).to_le_bytes());
+
+    let parser = parser::Parser::<SetterElement>::new();
+    let element = parser
+        .read_little_endian_element(&mut Cursor::new(bytes), &all_list_types_def())
+        .expect("all binary list types should parse through their default setters");
+
+    assert_all_setter_lists(&element);
+}
+
+#[derive(Debug)]
+struct RejectAllLists;
+
+macro_rules! reject_list {
+    ($method:ident, $value_type:ty) => {
+        fn $method(&mut self, _property_name: &str, _len: usize) -> BeginList<'_, $value_type> {
+            BeginList::UnsupportedType
+        }
+    };
+}
+
+impl PropertyAccess for RejectAllLists {
+    fn new() -> Self {
+        Self
+    }
+
+    reject_list!(begin_list_char, i8);
+    reject_list!(begin_list_uchar, u8);
+    reject_list!(begin_list_short, i16);
+    reject_list!(begin_list_ushort, u16);
+    reject_list!(begin_list_int, i32);
+    reject_list!(begin_list_uint, u32);
+    reject_list!(begin_list_float, f32);
+    reject_list!(begin_list_double, f64);
+}
+
+#[test]
+fn parser_rejects_all_unsupported_ascii_list_types() {
+    let parser = parser::Parser::<RejectAllLists>::new();
+    for scalar_type in [
+        ScalarType::Char,
+        ScalarType::UChar,
+        ScalarType::Short,
+        ScalarType::UShort,
+        ScalarType::Int,
+        ScalarType::UInt,
+        ScalarType::Float,
+        ScalarType::Double,
+    ] {
+        let header = single_property_header(
+            Encoding::Ascii,
+            "lists",
+            1,
+            "values",
+            PropertyType::List(ScalarType::UChar, scalar_type),
+        );
+        let def = &header.elements["lists"];
+        let err = parser
+            .read_ascii_element("0", def)
+            .expect_err("the destination should reject every list type");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("PLY property 'values'"));
+    }
+}
+
+#[test]
+fn parser_rejects_all_unsupported_binary_list_types() {
+    let parser = parser::Parser::<RejectAllLists>::new();
+    for scalar_type in [
+        ScalarType::Char,
+        ScalarType::UChar,
+        ScalarType::Short,
+        ScalarType::UShort,
+        ScalarType::Int,
+        ScalarType::UInt,
+        ScalarType::Float,
+        ScalarType::Double,
+    ] {
+        let header = single_property_header(
+            Encoding::BinaryLittleEndian,
+            "lists",
+            1,
+            "values",
+            PropertyType::List(ScalarType::UChar, scalar_type),
+        );
+        let def = &header.elements["lists"];
+        let err = parser
+            .read_little_endian_element(&mut Cursor::new([0]), def)
+            .expect_err("the destination should reject every list type");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("PLY property 'values'"));
+    }
+}
+
+#[test]
+fn parser_reader_exposes_and_returns_its_inner_reader() {
+    let mut reader = parser::Reader::new(Cursor::new(b"abc".to_vec()));
+    assert_eq!(reader.line(), 0);
+    assert_eq!(reader.get_ref().position(), 0);
+
+    reader.get_mut().set_position(2);
+    assert_eq!(reader.get_ref().position(), 2);
+
+    let inner = reader.into_inner();
+    assert_eq!(inner.into_inner(), b"abc");
+}
+
+#[test]
+fn parse_error_converts_to_io_error_without_losing_context() {
+    let parser = parser::Parser::<DefaultElement>::new();
+    let parse_error = parser
+        .read_header_line("not a header line")
+        .expect_err("the line should be rejected");
+    let io_error: std::io::Error = parse_error.into();
+
+    assert_eq!(io_error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(io_error.to_string().contains("Couldn't parse line"));
+}
+
+#[test]
+fn parser_header_reports_magic_number_failures() {
+    for (bytes, expected) in [
+        (&b""[..], "magic number"),
+        (&b"format ascii 1.0\n"[..], "Expected magic number"),
+        (&b"not-ply\n"[..], "Expected magic number"),
+    ] {
+        let err = try_read_from_bytes(bytes).expect_err("the magic number should be required");
+        assert!(err.to_string().contains(expected));
+    }
+}
+
+#[test]
+fn parser_header_rejects_invalid_lines_after_magic_number() {
+    for (bytes, expected) in [
+        (&b"ply\nnot a header line\n"[..], "Couldn't parse line"),
+        (&b"ply\nply\n"[..], "Unexpected 'ply'"),
+        (
+            &b"ply\nformat ascii 1.0\nelement item 184467440737095516150\n"[..],
+            "Invalid element",
+        ),
+    ] {
+        let err = try_read_from_bytes(bytes).expect_err("the header should be rejected");
+        assert!(err.to_string().contains(expected), "{err}");
+    }
+}
+
+#[test]
+fn parser_header_rejects_unrepresentable_versions() {
+    let one_invalid_format = b"ply\nformat ascii 65536.0\nend_header\n";
+    let err = try_read_from_bytes(one_invalid_format).expect_err("the version should be rejected");
+    assert!(err.to_string().contains("Invalid version number"));
+
+    let duplicate_invalid_format = b"ply\nformat ascii 65536.0\nformat ascii 65536.0\nend_header\n";
+    let err =
+        try_read_from_bytes(duplicate_invalid_format).expect_err("the version should be rejected");
+    assert!(err.to_string().contains("Invalid version"));
+}
+
+#[test]
+fn parser_ascii_reports_missing_and_invalid_values() {
+    let scalar_header = single_property_header(
+        Encoding::Ascii,
+        "item",
+        1,
+        "value",
+        PropertyType::Scalar(ScalarType::Char),
+    );
+    let scalar_def = &scalar_header.elements["item"];
+
+    let parser = parser::Parser::<DefaultElement>::new();
+    let err = parser
+        .read_ascii_element("", scalar_def)
+        .expect_err("a missing scalar should be rejected");
+    assert!(err.to_string().contains("found nothing"));
+
+    let err = parser
+        .read_ascii_element("128", scalar_def)
+        .expect_err("an out-of-range scalar should be rejected");
+    assert!(err.to_string().contains("Parse error"));
+
+    let list_header = single_property_header(
+        Encoding::Ascii,
+        "item",
+        1,
+        "values",
+        PropertyType::List(ScalarType::UChar, ScalarType::Char),
+    );
+    let list_def = &list_header.elements["item"];
+
+    let err = parser
+        .read_ascii_element("2 1", list_def)
+        .expect_err("a short list should be rejected");
+    assert!(err.to_string().contains("found only 1"));
+
+    let err = parser
+        .read_ascii_element("2 1 128", list_def)
+        .expect_err("an invalid list value should be rejected");
+    assert!(err.to_string().contains("index 1"));
+}
+
+#[test]
+fn parser_low_level_header_line_accepts_valid_input() {
+    let parser = parser::Parser::<DefaultElement>::new();
+    assert!(parser.read_header_line("format ascii 1.0").is_ok());
+}
+
+#[test]
+fn parser_header_accepts_repeated_identical_valid_format() {
+    let bytes = b"ply\nformat ascii 1.0\nformat ascii 1.0\nend_header\n";
+    let ply = try_read_from_bytes(bytes).expect("identical format lines should be accepted");
+    assert_eq!(ply.header.encoding, Encoding::Ascii);
+}
+
+#[test]
+fn parser_direct_big_endian_payload_dispatches_from_header() {
+    let header = single_property_header(
+        Encoding::BinaryBigEndian,
+        "item",
+        1,
+        "value",
+        PropertyType::Scalar(ScalarType::Int),
+    );
+    let bytes = 42i32.to_be_bytes();
+    let mut reader = parser::Reader::new(BufReader::new(&bytes[..]));
+    let parser = parser::Parser::<DefaultElement>::new();
+
+    let elements = parser
+        .read_payload_for_element(&mut reader, &header.elements["item"], &header)
+        .expect("the header encoding should select the big-endian reader");
+
+    assert_eq!(elements[0]["value"], Property::Int(42));
+}
+
+#[test]
+fn parser_rejects_double_binary_list_indices() {
+    let header = single_property_header(
+        Encoding::BinaryLittleEndian,
+        "item",
+        1,
+        "values",
+        PropertyType::List(ScalarType::Double, ScalarType::Int),
+    );
+    let parser = parser::Parser::<DefaultElement>::new();
+
+    let err = parser
+        .read_little_endian_element(&mut Cursor::new([]), &header.elements["item"])
+        .expect_err("floating-point list indices should be rejected");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(err.to_string().contains("double"));
+}
+
+#[test]
+fn property_lossy_color_conversion_handles_all_integer_widths() {
+    assert_eq!(Property::Char(-1).to_u8_color_lossy(), Some(255));
+    assert_eq!(Property::UShort(258).to_u8_color_lossy(), Some(2));
+    assert_eq!(Property::Int(259).to_u8_color_lossy(), Some(3));
+    assert_eq!(Property::UInt(260).to_u8_color_lossy(), Some(4));
+}
+
+#[test]
+fn property_integer_list_conversion_handles_all_integer_widths() {
+    assert_eq!(
+        Property::ListChar(vec![1, 2]).to_u32_list(),
+        Some(vec![1, 2])
+    );
+    assert_eq!(Property::ListChar(vec![-1]).to_u32_list(), None);
+    assert_eq!(
+        Property::ListShort(vec![3, 4]).to_u32_list(),
+        Some(vec![3, 4])
+    );
+    assert_eq!(Property::ListShort(vec![-1]).to_u32_list(), None);
+    assert_eq!(
+        Property::ListUShort(vec![5, 6]).to_u32_list(),
+        Some(vec![5, 6])
+    );
+    assert_eq!(
+        Property::ListUInt(vec![7, 8]).to_u32_list(),
+        Some(vec![7, 8])
+    );
+}
+
+#[test]
+fn default_element_getters_reject_mismatched_property_types() {
+    let mut element = DefaultElement::new();
+    element.insert("wrong".to_string(), Property::Int(1));
+
+    assert_eq!(element.get_char("wrong"), None);
+    assert_eq!(element.get_uchar("wrong"), None);
+    assert_eq!(element.get_short("wrong"), None);
+    assert_eq!(element.get_ushort("wrong"), None);
+    assert_eq!(element.get_uint("wrong"), None);
+    assert_eq!(element.get_float("wrong"), None);
+    assert_eq!(element.get_double("wrong"), None);
+    assert_eq!(element.get_list_char("wrong"), None);
+    assert_eq!(element.get_list_uchar("wrong"), None);
+    assert_eq!(element.get_list_short("wrong"), None);
+    assert_eq!(element.get_list_ushort("wrong"), None);
+    assert_eq!(element.get_list_int("wrong"), None);
+    assert_eq!(element.get_list_uint("wrong"), None);
+    assert_eq!(element.get_list_float("wrong"), None);
+    assert_eq!(element.get_list_double("wrong"), None);
+
+    element.insert("wrong".to_string(), Property::Float(1.0));
+    assert_eq!(element.get_int("wrong"), None);
+    assert!(matches!(
+        element.begin_list_char("wrong", 0),
+        BeginList::UseSetter
+    ));
+}
+
+#[test]
+fn consistency_error_implements_display_and_legacy_error_context() {
+    let err = ConsistencyError::new("broken input");
+    assert_eq!(err.to_string(), "ConsistencyError: broken input");
+
+    #[allow(deprecated)]
+    {
+        assert_eq!(std::error::Error::description(&err), "broken input");
+        assert!(std::error::Error::cause(&err).is_none());
+    }
+}
+
+#[test]
+fn consistency_rejects_empty_and_undeclared_payload_keys() {
+    let mut empty_name = Ply::<DefaultElement>::new();
+    empty_name.payload.insert(String::new(), Vec::new());
+    let err = empty_name
+        .make_consistent()
+        .expect_err("empty element names should be rejected");
+    assert!(err.to_string().contains("empty name"));
+
+    let mut undeclared = Ply::<DefaultElement>::new();
+    undeclared.payload.insert("orphan".to_string(), Vec::new());
+    let err = undeclared
+        .make_consistent()
+        .expect_err("payload elements need a declaration");
+    assert!(err.to_string().contains("No decleration"));
+}
+
+#[test]
+fn writer_checked_path_serializes_a_consistent_ply() {
+    let mut ply = Ply::<DefaultElement>::new();
+    let mut out = Vec::new();
+
+    let written = writer::Writer::new()
+        .write_ply(&mut out, &mut ply)
+        .expect("an empty PLY value should be made consistent and written");
+
+    assert_eq!(written, out.len());
+    assert_eq!(out, b"ply\nformat ascii 1.0\nend_header\n");
+}
+
+#[test]
+fn writer_rejects_double_list_indices_in_header() {
+    let property = PropertyDef::new(
+        "values".to_string(),
+        PropertyType::List(ScalarType::Double, ScalarType::Int),
+    );
+    let err = writer::Writer::<DefaultElement>::new()
+        .write_line_property_definition(&mut Vec::new(), &property)
+        .expect_err("floating-point list indices should be rejected");
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(err.to_string().contains("double"));
+}
+
+#[test]
+fn writer_binary_payload_rejects_floating_point_list_indices() {
+    for index_type in [ScalarType::Float, ScalarType::Double] {
+        let mut def = ElementDef::new("item".to_string());
+        def.properties.add(PropertyDef::new(
+            "values".to_string(),
+            PropertyType::List(index_type, ScalarType::Int),
+        ));
+        let mut element = DefaultElement::new();
+        element.insert("values".to_string(), Property::ListInt(Vec::new()));
+
+        let err = writer::Writer::new()
+            .write_little_endian_element(&mut Vec::new(), &element, &def)
+            .expect_err("floating-point list indices should be rejected");
+
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(err.to_string().contains("integer type"));
+    }
+}
