@@ -14,7 +14,6 @@ pub struct ConsistencyError {
 }
 impl ConsistencyError {
     /// Create a new error object with a given description of the problem.
-    #[must_use]
     pub fn new(description: &str) -> Self {
         ConsistencyError {
             description: description.to_string(),

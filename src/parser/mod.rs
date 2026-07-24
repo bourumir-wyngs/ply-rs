@@ -49,13 +49,11 @@ impl ParseError {
     }
 
     /// Returns the underlying error kind.
-    #[must_use]
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
 
     /// Returns the file-relative 1-based line number, when available.
-    #[must_use]
     pub fn line(&self) -> Option<usize> {
         self.line
     }
@@ -230,7 +228,6 @@ impl<E: PropertyAccess> Parser<E> {
     /// Creates a new `Parser<E>`, where `E` is the type to store the element data in.
     ///
     /// To get started quickly try `DefaultElement` from the `ply` module.
-    #[must_use]
     pub fn new() -> Self {
         Parser {
             phantom: PhantomData,

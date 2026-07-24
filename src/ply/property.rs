@@ -98,7 +98,6 @@ impl Property {
         clippy::cast_precision_loss,
         reason = "this API explicitly provides lossy scalar conversion"
     )]
-    #[must_use]
     pub fn to_f32_lossy(&self) -> Option<f32> {
         match self {
             Self::Char(v) => Some(f32::from(*v)),
@@ -132,7 +131,6 @@ impl Property {
         clippy::cast_sign_loss,
         reason = "this API explicitly provides lossy color conversion"
     )]
-    #[must_use]
     pub fn to_u8_color_lossy(&self) -> Option<u8> {
         match self {
             Self::Char(v) => Some(*v as u8),
@@ -155,7 +153,6 @@ impl Property {
     }
 
     /// Returns the bytes of an unsigned-char list property.
-    #[must_use]
     pub fn as_list_uchar(&self) -> Option<&[u8]> {
         match self {
             Self::ListUChar(values) => Some(values),

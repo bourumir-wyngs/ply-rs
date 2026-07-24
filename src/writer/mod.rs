@@ -63,7 +63,6 @@ use crate::ply::Ply;
 // /////////////
 impl<E: PropertyAccess> Writer<E> {
     /// Create a new `Writer<E>` where `E` is the element type. To get started quickly use `DefaultElement`.
-    #[must_use]
     pub fn new() -> Self {
         Writer {
             phantom: PhantomData,

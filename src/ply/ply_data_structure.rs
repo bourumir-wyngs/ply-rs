@@ -42,7 +42,6 @@ impl<E: PropertyAccess> Default for Ply<E> {
 }
 impl<E: PropertyAccess> Ply<E> {
     /// Creates a new `Ply<E>`.
-    #[must_use]
     pub fn new() -> Self {
         Ply::<E> {
             header: Header::new(),
@@ -82,7 +81,6 @@ impl Default for Header {
 impl Header {
     /// Constructs an empty `Header` using ASCII encoding and version 1.0.
     /// No object information, elements, or comments are set.
-    #[must_use]
     pub fn new() -> Self {
         Header {
             encoding: Encoding::Ascii,
@@ -175,7 +173,6 @@ impl ElementDef {
     /// (see `make_consistent()` of `Ply`).
     ///
     /// No properties are set.
-    #[must_use]
     pub fn new(name: String) -> Self {
         ElementDef {
             name,
@@ -200,7 +197,6 @@ pub struct PropertyDef {
 
 impl PropertyDef {
     /// Creates a new property definition.
-    #[must_use]
     pub fn new(name: String, data_type: PropertyType) -> Self {
         PropertyDef { name, data_type }
     }
