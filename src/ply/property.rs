@@ -267,6 +267,35 @@ pub enum BeginList<'a, T> {
 /// carry [`BeginList::UnsupportedType`] so the fast in-place list path can fail without building
 /// a temporary [`Vec`].
 ///
+/// The list setters are sufficient for reading list properties. By default, each
+/// `begin_list_*` method returns [`BeginList::UseSetter`], so the parser builds a
+/// `Vec` and passes it to the matching `set_list_*` method. Override a `begin_list_*`
+/// method when the destination already owns a suitable `Vec`: returning
+/// [`BeginList::Fill`] makes the parser clear, reserve, and fill that vector directly,
+/// without calling the list setter.
+///
+/// ```
+/// use ply_rs_bw::ply::{BeginList, PropertyAccess};
+///
+/// #[derive(Default)]
+/// struct Face {
+///     indices: Vec<i32>,
+/// }
+///
+/// impl PropertyAccess for Face {
+///     fn new() -> Self {
+///         Self::default()
+///     }
+///
+///     fn begin_list_int(&mut self, name: &str, _len: usize) -> BeginList<'_, i32> {
+///         match name {
+///             "vertex_indices" => BeginList::Fill(&mut self.indices),
+///             _ => BeginList::UnsupportedType,
+///         }
+///     }
+/// }
+/// ```
+///
 /// The getters are named in congruence with `PropertyType` and `ScalarType`.
 pub trait PropertyAccess {
     /// Creates a new, empty instance.

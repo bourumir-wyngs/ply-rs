@@ -32,8 +32,9 @@ form polygons by storing lists of indices that refer to those vertices.
 ### Read and write a struct
 
 When the schema is known, parsing directly into your final data structure avoids
-allocating a `DefaultElement` property map for every vertex. This can improve
-performance for PLY files containing many vertices. Vertex coordinates are
+allocating a [`DefaultElement`](https://docs.rs/ply-rs-bw/latest/ply_rs_bw/ply/type.DefaultElement.html)
+property map for every vertex. This can improve performance for PLY files
+containing many vertices. Vertex coordinates are
 commonly encoded as `float` (`f32`) or `double` (`f64`), although integer scalar
 types are also valid. The example below supports both floating-point types.
 
