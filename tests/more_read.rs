@@ -51,8 +51,8 @@ end_header\r\n\
     assert_eq!(payload.len(), 3);
     // (-7,5), (2,4), (0,0)
     let get = |i: usize, key: &str| match payload[i][key] {
-        ply::Property::Int(v) => v as i64,
-        ply::Property::UInt(v) => v as i64,
+        ply::Property::Int(v) => i64::from(v),
+        ply::Property::UInt(v) => i64::from(v),
         _ => panic!("unexpected type"),
     };
     assert_eq!(get(0, "x"), -7);
@@ -102,10 +102,10 @@ fn read_diverse_field_formats() {
         assert_eq!(ply.header.elements["face"].count, 1);
         // Check vertex property types x,y,z
         let vprops = &ply.header.elements["vertex"].properties;
-        for key in ["x", "y", "z"].iter() {
+        for key in &["x", "y", "z"] {
             match vprops[*key].data_type {
                 PropertyType::Scalar(ref s) => assert_eq!(*s, coord_ty),
-                _ => panic!("vertex {:?} should be scalar", key),
+                _ => panic!("vertex {key:?} should be scalar"),
             }
         }
         // Check face list type
@@ -132,7 +132,7 @@ fn read_diverse_field_formats() {
 #[test]
 fn read_header_with_very_long_obj_info() {
     let long = "x".repeat(10_000);
-    let txt = format!("ply\nformat ascii 1.0\nobj_info {}\nend_header\n", long);
+    let txt = format!("ply\nformat ascii 1.0\nobj_info {long}\nend_header\n");
     let ply = read_from_bytes(txt.as_bytes());
     assert_eq!(ply.header.obj_infos.len(), 1);
     assert_eq!(ply.header.obj_infos[0].len(), 10_000);

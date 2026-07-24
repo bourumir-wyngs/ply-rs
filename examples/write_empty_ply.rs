@@ -12,12 +12,12 @@ fn main() {
     // set up a writer
     let w = Writer::new();
     let written = w.write_ply(&mut buf, &mut ply).unwrap();
-    println!("{} bytes written", written);
+    println!("{written} bytes written");
     println!("buffer size: {}", buf.len());
 
     // proof that data has been read
 
     // We can use `from_utf8` since PLY files only contain ascii characters
     let output = String::from_utf8(buf).unwrap();
-    println!("Written data:\n{}", output);
+    println!("Written data:\n{output}");
 }

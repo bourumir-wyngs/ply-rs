@@ -63,6 +63,7 @@ use crate::ply::Ply;
 // /////////////
 impl<E: PropertyAccess> Writer<E> {
     /// Create a new `Writer<E>` where `E` is the element type. To get started quickly use `DefaultElement`.
+    #[must_use]
     pub fn new() -> Self {
         Writer {
             phantom: PhantomData,
@@ -80,10 +81,10 @@ impl<E: PropertyAccess> Writer<E> {
             Err(e) => {
                 return Err(io::Error::new(
                     ErrorKind::InvalidInput,
-                    format!("The given ply isn't consistent: {:?}", e),
+                    format!("The given ply isn't consistent: {e:?}"),
                 ));
             }
-        };
+        }
         self.write_ply_unchecked(out, ply)
     }
     /// Writes an entire PLY file modeled by `ply` to `out`, performs no consistency check.
@@ -158,7 +159,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// A comment must not contain a line break and only consist of ascii characters.
     pub fn write_line_comment<T: Write>(&self, out: &mut T, comment: &Comment) -> Result<usize> {
         let mut written = 0;
-        written += self.write_bytes(out, format!("comment {}", comment).as_bytes())?;
+        written += self.write_bytes(out, format!("comment {comment}").as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -167,7 +168,7 @@ impl<E: PropertyAccess> Writer<E> {
     /// An object information line must not contain a line break and only consist of ASCII characters.
     pub fn write_line_obj_info<T: Write>(&self, out: &mut T, obj_info: &ObjInfo) -> Result<usize> {
         let mut written = 0;
-        written += self.write_bytes(out, format!("obj_info {}", obj_info).as_bytes())?;
+        written += self.write_bytes(out, format!("obj_info {obj_info}").as_bytes())?;
         written += self.write_new_line(out)?;
         Ok(written)
     }
@@ -233,7 +234,7 @@ impl<E: PropertyAccess> Writer<E> {
     }
     /// Convenience method to write all header elements.
     ///
-    /// It starts with writing the magic number "ply\n" and ends with "end_header".
+    /// It starts with writing the magic number "ply\n" and ends with "`end_header`".
     ///
     /// Make sure the header is consistent with the payload.
     pub fn write_header<T: Write>(&self, out: &mut T, header: &Header) -> Result<usize> {
@@ -283,7 +284,7 @@ impl<E: PropertyAccess> Writer<E> {
                         ));
                     }
                     _ => (),
-                };
+                }
                 written += self.write_scalar_type(out, index_type)?;
                 written += self.write_bytes(out, " ".as_bytes())?;
                 written += self.write_scalar_type(out, content_type)?;
@@ -470,14 +471,14 @@ impl<E: PropertyAccess> Writer<E> {
     }
     fn write_ascii_scalar<T: Write, V: Display>(&self, out: &mut T, value: V) -> Result<usize> {
         let mut cw = CountingWrite::new(out);
-        write!(&mut cw, "{}", value)?;
+        write!(&mut cw, "{value}")?;
         Ok(cw.bytes)
     }
     fn write_ascii_list<T: Write, D: Display>(&self, list: &[D], out: &mut T) -> Result<usize> {
         let mut cw = CountingWrite::new(out);
         write!(&mut cw, "{}", list.len())?;
         for v in list {
-            write!(&mut cw, " {}", v)?;
+            write!(&mut cw, " {v}")?;
         }
         Ok(cw.bytes)
     }

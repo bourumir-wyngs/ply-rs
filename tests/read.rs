@@ -50,7 +50,7 @@ fn read_empy_equal() {
 #[test]
 fn read_house() {
     let ply = read_from_bytes(HOUSE_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
     assert_eq!(ply.header.elements["face"].count, 3);
     assert_eq!(ply.payload["vertex"].len(), 5);
     assert_eq!(ply.payload["face"].len(), 3);
@@ -65,27 +65,27 @@ fn read_house_equal() {
 #[test]
 fn read_greg_turk_1() {
     let ply = read_from_bytes(GREG_TURK_EXAMPLE1_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
 }
 #[test]
 fn read_greg_turk_2() {
     let ply = read_from_bytes(GREG_TURK_EXAMPLE2_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
 }
 #[test]
 fn read_exponent_values_ok() {
     let ply = read_from_bytes(EXPONENT_VALUES_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
 }
 #[test]
 fn read_leading_spaces_ok() {
     let ply = read_from_bytes(LEADING_SPACES_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
 }
 #[test]
 fn read_all_atomic_types_ok() {
     let ply = read_from_bytes(ALL_ATOMIC_TYPES_OK_ASCII);
-    println!("Created ply: {:?}", ply);
+    println!("Created ply: {ply:?}");
 }
 
 mod struct_test_1 {
@@ -118,7 +118,7 @@ mod struct_test_1 {
                 ("x", ply::Property::Float(v)) => self.x = v,
                 ("y", ply::Property::Float(v)) => self.y = v,
                 ("z", ply::Property::Float(v)) => self.z = v,
-                (k, _) => panic!("Vertex: Unexpected key/value combination: key: {}", k),
+                (k, _) => panic!("Vertex: Unexpected key/value combination: key: {k}"),
             }
             PropertyAccessResult::Set
         }
@@ -134,7 +134,7 @@ mod struct_test_1 {
         fn set_property(&mut self, key: &str, property: ply::Property) -> PropertyAccessResult {
             match (key, property) {
                 ("vertex_index", ply::Property::ListInt(vec)) => self.vertex_index = vec,
-                (k, _) => panic!("Face: Unexpected key/value combination: key: {}", k),
+                (k, _) => panic!("Face: Unexpected key/value combination: key: {k}"),
             }
             PropertyAccessResult::Set
         }
@@ -175,9 +175,9 @@ mod struct_test_1 {
             }
         }
 
-        println!("header: {:#?}", header);
-        println!("vertex list: {:#?}", vertex_list);
-        println!("face list: {:#?}", face_list);
+        println!("header: {header:#?}");
+        println!("vertex list: {vertex_list:#?}");
+        println!("face list: {face_list:#?}");
 
         let ply = read_from_bytes(GREG_TURK_EXAMPLE1_OK_ASCII);
 

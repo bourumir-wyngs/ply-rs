@@ -14,7 +14,7 @@ use super::PropertyAccessResult;
 /// PLY files carry the payload format in their header section.
 /// Hence, they can contain all kinds of elements, or formulated differently,
 /// they define types very dynamically.
-/// To achieve this flexibility in rust, this alias to a HashMap is provided.
+/// To achieve this flexibility in rust, this alias to a `HashMap` is provided.
 ///
 /// If you need a more compact representation or faster access,
 /// you might want to define your own structures and implement the `PropertyAccess` trait.

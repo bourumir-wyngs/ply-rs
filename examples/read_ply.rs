@@ -13,5 +13,5 @@ fn main() {
     let ply = p.read_ply(&mut f).unwrap();
 
     // Proof that data has been read.
-    println!("Read ply data: {:#?}", ply);
+    println!("Read ply data: {ply:#?}");
 }

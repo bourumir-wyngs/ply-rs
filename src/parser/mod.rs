@@ -49,11 +49,13 @@ impl ParseError {
     }
 
     /// Returns the underlying error kind.
+    #[must_use]
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
 
     /// Returns the file-relative 1-based line number, when available.
+    #[must_use]
     pub fn line(&self) -> Option<usize> {
         self.line
     }
@@ -132,7 +134,7 @@ fn parse_ascii_rethrow<T, E: Debug>(
     Err(ParseError::with_line(
         ErrorKind::InvalidInput,
         location.line_index,
-        format!("{message}\n\tString: '{line_str}'\n\tError: {:?}", e),
+        format!("{message}\n\tString: '{line_str}'\n\tError: {e:?}"),
     ))
 }
 fn parse_ascii_error<T>(location: &LocationTracker, line_str: &str, message: &str) -> Result<T> {
@@ -228,6 +230,7 @@ impl<E: PropertyAccess> Parser<E> {
     /// Creates a new `Parser<E>`, where `E` is the type to store the element data in.
     ///
     /// To get started quickly try `DefaultElement` from the `ply` module.
+    #[must_use]
     pub fn new() -> Self {
         Parser {
             phantom: PhantomData,
@@ -315,7 +318,7 @@ impl<E: PropertyAccess> Parser<E> {
             Ok(l) => Ok(l),
             Err(e) => Err(ParseError::new(
                 ErrorKind::InvalidInput,
-                format!("Couldn't parse line.\n\tString: {}\n\tError: {:?}", line, e),
+                format!("Couldn't parse line.\n\tString: {line}\n\tError: {e:?}"),
             )),
         }
     }
@@ -346,7 +349,7 @@ impl<E: PropertyAccess> Parser<E> {
                 return parse_ascii_error(
                     location,
                     &line_str,
-                    &format!("Expected magic number 'ply', but saw '{:?}'.", l),
+                    &format!("Expected magic number 'ply', but saw '{l:?}'."),
                 );
             }
             Err(e) => {
@@ -403,7 +406,7 @@ impl<E: PropertyAccess> Parser<E> {
                 Ok(Line::Comment(ref c)) => header_comments.push(c.clone()),
                 Ok(Line::Element(ref e)) => {
                     if let Some(e) = e {
-                        header_elements.add(e.clone())
+                        header_elements.add(e.clone());
                     } else {
                         return parse_ascii_error(location, &line_str, "Invalid element");
                     }
@@ -413,7 +416,7 @@ impl<E: PropertyAccess> Parser<E> {
                         return parse_ascii_error(
                             location,
                             &line_str,
-                            &format!("Property '{:?}' found without preceding element.", p),
+                            &format!("Property '{p:?}' found without preceding element."),
                         );
                     } else {
                         let (_, mut e) = header_elements.pop().unwrap();
@@ -425,7 +428,7 @@ impl<E: PropertyAccess> Parser<E> {
                     location.next_line();
                     break 'readlines;
                 }
-            };
+            }
             location.next_line();
         }
 
@@ -587,8 +590,7 @@ impl<E: PropertyAccess> Parser<E> {
                 return Err(ParseError::new(
                     ErrorKind::InvalidInput,
                     format!(
-                        "Couldn't parse element line.\n\tString: '{}'\n\tError: {}",
-                        line, e
+                        "Couldn't parse element line.\n\tString: '{line}'\n\tError: {e}"
                     ),
                 ));
             }
@@ -612,8 +614,7 @@ impl<E: PropertyAccess> Parser<E> {
                 return Err(ParseError::new(
                     ErrorKind::InvalidInput,
                     format!(
-                        "Expected element of type '{:?}', but found nothing.",
-                        data_type
+                        "Expected element of type '{data_type:?}', but found nothing."
                     ),
                 ));
             }
@@ -832,7 +833,7 @@ impl<E: PropertyAccess> Parser<E> {
             Ok(r) => Ok(r),
             Err(e) => Err(ParseError::new(
                 ErrorKind::InvalidInput,
-                format!("Parse error.\n\tValue: '{}'\n\tError: {:?}, ", s, e),
+                format!("Parse error.\n\tValue: '{s}'\n\tError: {e:?}, "),
             )),
         }
     }
@@ -874,7 +875,7 @@ impl<E: PropertyAccess> Parser<E> {
                 None => {
                     return Err(ParseError::new(
                         ErrorKind::InvalidInput,
-                        format!("Expected {} list elements, but found only {}.", count, i),
+                        format!("Expected {count} list elements, but found only {i}."),
                     ));
                 }
             };
@@ -883,7 +884,7 @@ impl<E: PropertyAccess> Parser<E> {
                 Err(err) => {
                     return Err(ParseError::new(
                         ErrorKind::InvalidInput,
-                        format!("Couldn't parse element at index {}: {:?}", i, err),
+                        format!("Couldn't parse element at index {i}: {err:?}"),
                     ));
                 }
             }
@@ -1242,7 +1243,7 @@ impl<E: PropertyAccess> Parser<E> {
                         "List length cannot be negative (i8).",
                     ));
                 }
-                usize::try_from(v as i64).map_err(|_| {
+                usize::try_from(i64::from(v)).map_err(|_| {
                     ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length does not fit into usize.",
@@ -1258,7 +1259,7 @@ impl<E: PropertyAccess> Parser<E> {
                         "List length cannot be negative (i16).",
                     ));
                 }
-                usize::try_from(v as i64).map_err(|_| {
+                usize::try_from(i64::from(v)).map_err(|_| {
                     ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length does not fit into usize.",
@@ -1274,7 +1275,7 @@ impl<E: PropertyAccess> Parser<E> {
                         "List length cannot be negative (i32).",
                     ));
                 }
-                usize::try_from(v as i64).map_err(|_| {
+                usize::try_from(i64::from(v)).map_err(|_| {
                     ParseError::new(
                         ErrorKind::InvalidInput,
                         "List length does not fit into usize.",
@@ -1468,7 +1469,7 @@ mod tests {
         elem_def.properties = prop;
 
         let properties = p.read_ascii_element(txt, &elem_def);
-        assert!(properties.is_ok(), "{}", format!("error: {:?}", properties));
+        assert!(properties.is_ok(), "{}", format!("error: {properties:?}"));
     }
     #[test]
     fn magic_number_ok() {

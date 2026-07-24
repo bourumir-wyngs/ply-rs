@@ -14,6 +14,7 @@ pub struct ConsistencyError {
 }
 impl ConsistencyError {
     /// Create a new error object with a given description of the problem.
+    #[must_use]
     pub fn new(description: &str) -> Self {
         ConsistencyError {
             description: description.to_string(),
@@ -73,8 +74,7 @@ impl<E: PropertyAccess> Ply<E> {
             }
             let Some(ed) = self.header.elements.get_mut(pk) else {
                 return Err(ConsistencyError::new(&format!(
-                    "No decleration for element `{}` found.",
-                    pk
+                    "No decleration for element `{pk}` found."
                 )));
             };
             ed.count = pe.len();
@@ -82,16 +82,14 @@ impl<E: PropertyAccess> Ply<E> {
         for oi in &self.header.obj_infos {
             if has_line_break(oi) {
                 return Err(ConsistencyError::new(&format!(
-                    "Object information `{}` should not contain any line breaks.",
-                    oi
+                    "Object information `{oi}` should not contain any line breaks."
                 )));
             }
         }
         for c in &self.header.comments {
             if has_line_break(c) {
                 return Err(ConsistencyError::new(&format!(
-                    "Comment `{}` should not contain any line breaks.",
-                    c
+                    "Comment `{c}` should not contain any line breaks."
                 )));
             }
         }

@@ -19,13 +19,13 @@ fn write_buff(ply: &Ply) -> Vec<u8> {
 }
 
 fn read_write_ply(ply: &Ply) -> Ply {
-    println!("writing ply:\n{:?}", ply);
+    println!("writing ply:\n{ply:?}");
     let ve: Vec<u8> = write_buff(ply);
     let txt = String::from_utf8(ve.clone()).unwrap();
-    println!("written ply:\n{}", txt);
+    println!("written ply:\n{txt}");
     let mut buff = BufReader::new(&(*ve));
     let new_ply = read_buff(&mut buff);
-    println!("read ply:\n{:?}", new_ply);
+    println!("read ply:\n{new_ply:?}");
     assert_eq!(ply.header, new_ply.header);
     assert_eq!(ply.payload, new_ply.payload);
     new_ply
@@ -258,7 +258,7 @@ fn write_ascii_element_with_no_properties() {
 
 // Helper function for binary write-read round-trip tests
 fn read_write_binary_ply(ply: &Ply, encoding: Encoding) -> Ply {
-    println!("writing ply with encoding {:?}:\n{:?}", encoding, ply);
+    println!("writing ply with encoding {encoding:?}:\n{ply:?}");
 
     // Create a copy with the desired encoding
     let mut ply_to_write = ply.clone();
@@ -269,7 +269,7 @@ fn read_write_binary_ply(ply: &Ply, encoding: Encoding) -> Ply {
 
     let mut buff = BufReader::new(&(*ve));
     let new_ply = read_buff(&mut buff);
-    println!("read ply:\n{:?}", new_ply);
+    println!("read ply:\n{new_ply:?}");
 
     // Compare header (encoding should match)
     assert_eq!(ply_to_write.header, new_ply.header);

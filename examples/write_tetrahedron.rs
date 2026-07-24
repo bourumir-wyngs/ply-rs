@@ -18,11 +18,11 @@ fn main() {
     // Set up a writer and write the PLY data
     let w = Writer::new();
     let written = w.write_ply(&mut buf, &mut ply).unwrap();
-    println!("{} bytes written", written);
+    println!("{written} bytes written");
 
     // Display the written PLY file content
     let output = String::from_utf8(buf).unwrap();
-    println!("Written PLY data:\n{}", output);
+    println!("Written PLY data:\n{output}");
 
     // Demonstrate binary writing (skipped under Miri)
     #[cfg(not(miri))]

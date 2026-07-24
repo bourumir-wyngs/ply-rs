@@ -30,7 +30,7 @@ impl ply::PropertyAccess for Vertex {
             ("x", ply::Property::Float(v)) => self.x = v,
             ("y", ply::Property::Float(v)) => self.y = v,
             ("z", ply::Property::Float(v)) => self.z = v,
-            (k, _) => panic!("Vertex: Unexpected key/value combination: key: {}", k),
+            (k, _) => panic!("Vertex: Unexpected key/value combination: key: {k}"),
         }
         PropertyAccessResult::Set
     }
@@ -46,7 +46,7 @@ impl ply::PropertyAccess for Face {
     fn set_property(&mut self, key: &str, property: ply::Property) -> PropertyAccessResult {
         match (key, property) {
             ("vertex_index", ply::Property::ListInt(vec)) => self.vertex_index = vec,
-            (k, _) => panic!("Face: Unexpected key/value combination: key: {}", k),
+            (k, _) => panic!("Face: Unexpected key/value combination: key: {k}"),
         }
         PropertyAccessResult::Set
     }
@@ -92,7 +92,7 @@ fn main() {
     }
 
     // Proof that data has been read.
-    println!("header: {:#?}", header);
-    println!("vertex list: {:#?}", vertex_list);
-    println!("face list: {:#?}", face_list);
+    println!("header: {header:#?}");
+    println!("vertex list: {vertex_list:#?}");
+    println!("face list: {face_list:#?}");
 }

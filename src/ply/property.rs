@@ -93,12 +93,13 @@ impl Property {
     /// Converts any scalar numeric property to `f32` using Rust's standard casts.
     ///
     /// Returns `None` for list properties.
+    #[must_use]
     pub fn to_f32_lossy(&self) -> Option<f32> {
         match self {
-            Self::Char(v) => Some(*v as f32),
-            Self::UChar(v) => Some(*v as f32),
-            Self::Short(v) => Some(*v as f32),
-            Self::UShort(v) => Some(*v as f32),
+            Self::Char(v) => Some(f32::from(*v)),
+            Self::UChar(v) => Some(f32::from(*v)),
+            Self::Short(v) => Some(f32::from(*v)),
+            Self::UShort(v) => Some(f32::from(*v)),
             Self::Int(v) => Some(*v as f32),
             Self::UInt(v) => Some(*v as f32),
             Self::Float(v) => Some(*v),
@@ -121,6 +122,7 @@ impl Property {
     /// and scaled to `0..=255` before casting.
     ///
     /// Returns `None` for list properties.
+    #[must_use]
     pub fn to_u8_color_lossy(&self) -> Option<u8> {
         match self {
             Self::Char(v) => Some(*v as u8),
@@ -143,6 +145,7 @@ impl Property {
     }
 
     /// Returns the bytes of an unsigned-char list property.
+    #[must_use]
     pub fn as_list_uchar(&self) -> Option<&[u8]> {
         match self {
             Self::ListUChar(values) => Some(values),
@@ -243,7 +246,7 @@ pub enum BeginList<'a, T> {
 /// Provides setters and getters for the Parser and the Writer.
 ///
 /// This trait allows you to create your own data structure for the case that the
-/// default HashMap isn't efficient enough for you.
+/// default `HashMap` isn't efficient enough for you.
 ///
 /// All setters and getters have default implementations that do nothing or at most return `None`.
 ///

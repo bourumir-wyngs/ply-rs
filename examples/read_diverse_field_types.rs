@@ -12,14 +12,14 @@ use std::io::BufReader;
 pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
     // Open the file
     let file = File::open(ply_file_path)
-        .unwrap_or_else(|_| panic!("Could not open PLY file: {}", ply_file_path));
+        .unwrap_or_else(|_| panic!("Could not open PLY file: {ply_file_path}"));
     let mut reader = BufReader::new(file);
 
     // Create a PLY parser and parse the header
     let parser = Parser::<DefaultElement>::new();
     let ply = parser
         .read_ply(&mut reader)
-        .unwrap_or_else(|_| panic!("Could not parse PLY file: {}", ply_file_path));
+        .unwrap_or_else(|_| panic!("Could not parse PLY file: {ply_file_path}"));
 
     // Extract vertices and faces from the PLY file
     let mut vertices = Vec::new();
@@ -50,11 +50,9 @@ pub fn read_mesh(ply_file_path: &str) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
             let triangle = face
                 .get("vertex_indices")
                 .and_then(ply_rs_bw::ply::Property::to_u32_list)
-                .unwrap_or_else(|| panic!("Missing or invalid 'vertex_indices' for face {}", i));
+                .unwrap_or_else(|| panic!("Missing or invalid 'vertex_indices' for face {i}"));
 
-            if triangle.len() < 3 {
-                panic!("Insufficient indices for a triangle in face {}", i);
-            }
+            assert!(triangle.len() >= 3, "Insufficient indices for a triangle in face {i}");
 
             indices.push([triangle[0], triangle[1], triangle[2]]);
         }

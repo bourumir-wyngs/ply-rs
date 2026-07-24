@@ -18,5 +18,5 @@ fn main() {
     let header = p.read_header(&mut reader).unwrap();
 
     // Proof that data has been read.
-    println!("Read ply header: {:#?}", header);
+    println!("Read ply header: {header:#?}");
 }
